@@ -25,20 +25,22 @@
 
 :root {
   color-scheme: dark;
-  --background: #0a0e11;
-  --foreground: #f1f5f4;
-  --card: #10161a;
-  --card-foreground: #f1f5f4;
-  --panel: #0d1215;
-  --panel-raised: #141b20;
-  --muted: #192126;
-  --muted-foreground: #98a5aa;
-  --accent: #1d2a30;
-  --accent-foreground: #f3f7f6;
-  --border: #263139;
-  --ring: #7dd3d4;
-  --primary: #a9f0e6;
-  --primary-foreground: #07100f;
+  /* Keep the neutral Layer0/shadcn foundation: Geist, hairline borders,
+     monochrome controls. Cyan and amber remain semantic signals, not chrome. */
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #111111;
+  --card-foreground: #ededed;
+  --panel: #0d0d0d;
+  --panel-raised: #171717;
+  --muted: #242424;
+  --muted-foreground: #a1a1aa;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --border: rgba(255, 255, 255, 0.1);
+  --ring: #a1a1aa;
+  --primary: #ededed;
+  --primary-foreground: #171717;
   --destructive: #ff6b66;
   --cyan: #74d7d3;
   --amber: #f2bd68;
@@ -92,9 +94,7 @@ a {
   display: grid;
   min-height: 100dvh;
   grid-template-rows: 58px minmax(0, 1fr);
-  background:
-    radial-gradient(circle at 48% 0%, rgba(82, 168, 166, 0.08), transparent 28rem),
-    var(--background);
+  background: var(--background);
 }
 
 .workspace-grid {
@@ -104,17 +104,15 @@ a {
 }
 
 .glass-panel {
-  background: color-mix(in srgb, var(--panel) 94%, transparent);
-  backdrop-filter: blur(18px);
+  background: var(--panel);
 }
 
 .eyebrow {
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-transform: uppercase;
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25;
 }
 
 .keycap {

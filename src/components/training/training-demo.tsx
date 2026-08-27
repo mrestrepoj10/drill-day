@@ -2,12 +2,8 @@
 
 import Link from "next/link";
 import {
-  Activity,
-  Box,
   GitFork,
   MousePointer2,
-  ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import {
   useCallback,
@@ -364,20 +360,15 @@ export function TrainingDemo() {
 
   return (
     <div className="app-shell">
-      <header className="flex items-center gap-4 border-b border-border bg-background/90 px-5 backdrop-blur-xl">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-lg border border-cyan/30 bg-cyan/10 text-cyan">
-            <Box className="size-4" aria-hidden="true" />
-          </span>
-          <div>
-            <div className="font-mono text-[13px] font-bold tracking-[0.14em]">DRILL / DAY</div>
-            <div className="text-[10px] text-muted-foreground">AI-guided training in a live building model</div>
-          </div>
+      <header className="flex items-center gap-5 border-b border-border bg-background px-5">
+        <div>
+          <div className="text-[13px] font-semibold tracking-[-0.01em]">Drill Day</div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">AI-guided training in a live building model</div>
         </div>
-        <div className="ml-auto hidden items-center gap-2 lg:flex">
-          <HeaderBadge icon={Sparkles}>Autodesk Scene API</HeaderBadge>
-          <HeaderBadge icon={Activity}>WebMCP · 13 site tools</HeaderBadge>
-          <HeaderBadge icon={ShieldCheck}>Open source · MIT</HeaderBadge>
+        <div className="ml-auto hidden items-center gap-4 text-[11px] text-muted-foreground lg:flex">
+          <HeaderMeta>Autodesk Scene API</HeaderMeta>
+          <HeaderMeta>WebMCP · 13 site tools</HeaderMeta>
+          <HeaderMeta>Open source · MIT</HeaderMeta>
         </div>
         <Link
           href="https://github.com/mrestrepoj10/drill-day"
@@ -431,7 +422,7 @@ export function TrainingDemo() {
 
           {hover ? (
             <div
-              className="pointer-events-none absolute z-30 max-w-56 translate-x-3 translate-y-3 rounded-lg border border-cyan/25 bg-[#0a0f12]/95 px-2.5 py-2 shadow-xl backdrop-blur"
+              className="pointer-events-none absolute z-30 max-w-56 translate-x-3 translate-y-3 rounded-md border border-border bg-background/95 px-2.5 py-2"
               style={{ left: hover.x, top: hover.y }}
             >
               <div className="text-[11px] font-semibold">{hover.name}</div>
@@ -440,11 +431,11 @@ export function TrainingDemo() {
           ) : null}
 
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3">
-            <div className="rounded-lg border border-border bg-background/88 px-3 py-2 text-[11px] shadow-lg backdrop-blur">
+            <div className="rounded-md border border-border bg-background/90 px-3 py-2 text-[11px]">
               <span className="font-semibold">{roleLabel ?? "Choose a scenario"}</span>
               <span className="text-muted-foreground"> · L{session.level} · {locationLabel}</span>
             </div>
-            <div className="pointer-events-auto flex gap-1 rounded-lg border border-border bg-background/88 p-1 shadow-lg backdrop-blur">
+            <div className="pointer-events-auto flex gap-1 rounded-md border border-border bg-background/90 p-1">
               {Array.from({ length: LEVELS }, (_, level) => {
                 const locked = session.status === "running" && session.step?.mode === "reach";
                 return (
@@ -468,7 +459,7 @@ export function TrainingDemo() {
 
           {notice ? (
             <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center px-4">
-              <div className={`max-w-lg rounded-lg border px-3 py-2 text-center text-[12px] font-medium shadow-xl backdrop-blur ${
+              <div className={`max-w-lg rounded-md border px-3 py-2 text-center text-[12px] font-medium ${
                 notice.tone === "good"
                   ? "border-success/40 bg-[#10251b]/95 text-success"
                   : notice.tone === "near"
@@ -484,13 +475,13 @@ export function TrainingDemo() {
 
           {replaying ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
-              <div className="rounded-lg border border-cyan/30 bg-background/92 px-4 py-2 text-[11px] text-cyan backdrop-blur">
+              <div className="rounded-md border border-cyan/30 bg-background/95 px-4 py-2 text-[11px] text-cyan">
                 Replaying the route and every decision in sequence…
               </div>
             </div>
           ) : session.status === "running" ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-4">
-              <div className="flex flex-wrap items-center justify-center gap-3 rounded-xl border border-border bg-background/88 px-3 py-2 text-[10px] text-muted-foreground shadow-xl backdrop-blur">
+              <div className="flex flex-wrap items-center justify-center gap-3 rounded-md border border-border bg-background/90 px-3 py-2 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="keycap">W</span><span className="keycap">A</span><span className="keycap">S</span><span className="keycap">D</span> walk</span>
                 <span>Drag to look</span>
                 <span className="flex items-center gap-1"><MousePointer2 className="size-3" aria-hidden="true" /> click a component to answer</span>
@@ -505,10 +496,10 @@ export function TrainingDemo() {
   );
 }
 
-function HeaderBadge({ icon: Icon, children }: { icon: typeof Activity; children: React.ReactNode }) {
+function HeaderMeta({ children }: { children: React.ReactNode }) {
   return (
-    <span className="flex items-center gap-1.5 rounded-full border border-border bg-muted/35 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
-      <Icon className="size-3 text-cyan" aria-hidden="true" /> {children}
+    <span className="border-l border-border pl-4 first:border-l-0 first:pl-0">
+      {children}
     </span>
   );
 }

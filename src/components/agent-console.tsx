@@ -12,7 +12,6 @@ import {
   ClipboardCheck,
   Footprints,
   ShieldAlert,
-  Sparkles,
   Wrench,
 } from "lucide-react";
 import { useModelContext, type RegisteredTool, type ToolCall } from "@layer0/webmcp";
@@ -88,13 +87,11 @@ export function AgentConsole({
           <span className={`size-2 rounded-full ${flavor === "native" ? "bg-success" : "bg-amber"}`} />
           <div>
             <div className="text-[12px] font-semibold">Agent activity</div>
-            <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
               {flavor === "native" ? "Native WebMCP" : "WebMCP polyfill"} · {mine.length} tools discoverable
             </div>
           </div>
-          <span className="ml-auto rounded-full border border-cyan/25 bg-cyan/8 px-2 py-1 font-mono text-[9px] text-cyan">
-            live
-          </span>
+          <span className="ml-auto text-[11px] text-success">Live</span>
         </div>
         <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
           Human choices, scene events, and every agent tool call share one audit trail.
@@ -173,10 +170,7 @@ function ActivityFeed({
   return (
     <div role="tabpanel" className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-3.5 text-cyan" aria-hidden="true" />
-          <span className="eyebrow text-muted-foreground">Try with ChatGPT</span>
-        </div>
+        <span className="eyebrow text-muted-foreground">Try with ChatGPT</span>
         <p className="mt-2 text-[11px] leading-relaxed text-foreground">{SUGGESTED_PROMPT}</p>
         <button
           type="button"
@@ -216,7 +210,7 @@ function ActivityFeed({
                 type="button"
                 disabled={!!busy}
                 onClick={() => onRunDrill(drill)}
-                className="w-full rounded-lg border border-border bg-muted/20 px-2.5 py-2 text-left transition hover:bg-accent disabled:opacity-40"
+                className="w-full rounded-md border border-border bg-muted/20 px-2.5 py-2 text-left transition hover:bg-accent disabled:opacity-40"
               >
                 <span className="block text-[11px] font-medium">{busy === drill.label ? "Running…" : drill.label}</span>
                 <span className="mt-0.5 block text-[9px] leading-relaxed text-muted-foreground">{drill.hint}</span>
@@ -257,7 +251,7 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">{event.actor}</span>
+            <span className="text-[11px] font-medium text-muted-foreground">{event.actor}</span>
             <time className="ml-auto font-mono text-[9px] text-muted-foreground">{formatTime(event.at)}</time>
           </div>
           <p className="mt-1 text-[11px] font-semibold leading-relaxed">{event.title}</p>
@@ -323,7 +317,7 @@ function ToolRow({
           <span className="mt-0.5 block truncate font-mono text-[9px] text-muted-foreground">{tool.name}</span>
         </span>
         {tool.annotations?.readOnlyHint ? (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-muted-foreground">read</span>
+          <span className="text-[10px] text-muted-foreground">Read only</span>
         ) : null}
       </button>
       {open ? (

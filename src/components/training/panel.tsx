@@ -10,7 +10,6 @@ import {
   MapPinned,
   RotateCcw,
   ShieldAlert,
-  Sparkles,
   Timer,
 } from "lucide-react";
 import type { TrainingSession } from "@layer0/viewer-training";
@@ -69,8 +68,8 @@ export function TrainingPanel({
                   {mission.title}
                 </h1>
               </div>
-              <span className="rounded-full border border-cyan/30 bg-cyan/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan">
-                {mission.author}
+              <span className="text-[11px] text-muted-foreground">
+                {mission.author === "agent" ? "Written by the agent" : "Built in"}
               </span>
             </div>
             <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
@@ -91,7 +90,7 @@ export function TrainingPanel({
                         cleared
                           ? "border-success/40 bg-success/15 text-success"
                           : current
-                            ? "border-cyan bg-cyan text-primary-foreground"
+                            ? "border-foreground bg-foreground text-background"
                             : "border-border bg-muted/40 text-muted-foreground"
                       }`}
                     >
@@ -257,16 +256,15 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
           sizes="(max-width: 820px) 100vw, 350px"
           className="object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0d1215] via-[#0d1215]/15 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-5">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/80 backdrop-blur">
-            <span className="size-1.5 animate-pulse rounded-full bg-amber" /> Live callout · 07:42
+        <div className="absolute inset-x-0 bottom-0 border-t border-white/10 bg-black/70 px-5 py-2.5">
+          <span className="font-mono text-[11px] text-white/80">
+            Live callout · 07:42
           </span>
         </div>
       </div>
 
       <section className="px-5 py-5">
-        <div className="eyebrow text-cyan">Northgate Data &amp; Logistics</div>
+        <div className="eyebrow text-muted-foreground">Northgate Data &amp; Logistics</div>
         <h1 className="mt-3 text-[26px] font-semibold leading-[1.08] tracking-[-0.045em]">
           Train inside the building—not from a manual.
         </h1>
@@ -274,19 +272,20 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
           Walk to Room 214, diagnose a chilled-water leak, and isolate the right valve. Your agent shares the live scene, coaches the learner, and can author the next drill.
         </p>
 
-        <div className="mt-5 grid grid-cols-3 gap-2" aria-label="Drill stages">
+        <ol className="mt-5 grid grid-cols-3 divide-x divide-border border-y border-border" aria-label="Drill stages">
           {FLAGSHIP_STAGES.map((stage, index) => (
-            <div key={stage.label} className="rounded-lg border border-border bg-muted/20 p-2.5">
-              <span className="font-mono text-[10px] text-cyan">0{index + 1}</span>
-              <span className="mt-1 block text-[11px] font-semibold">{stage.label}</span>
-            </div>
+            <li key={stage.label} className="px-2.5 py-3 first:pl-0 last:pr-0">
+              <span className="block text-[12px] font-semibold">{stage.label}</span>
+              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{stage.detail}</span>
+              <span className="sr-only">Step {index + 1}</span>
+            </li>
           ))}
-        </div>
+        </ol>
 
         <button
           type="button"
           onClick={() => onPickRole("technician")}
-          className="group mt-5 flex h-12 w-full items-center justify-between rounded-xl bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition hover:brightness-105"
+          className="group mt-5 flex h-11 w-full items-center justify-between rounded-md bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition hover:bg-white"
         >
           <span className="flex items-center gap-2">
             <Timer className="size-4" aria-hidden="true" /> Start the 90-second drill
@@ -294,9 +293,8 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
           <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
         </button>
 
-        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-cyan/20 bg-cyan/6 p-3">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-cyan" aria-hidden="true" />
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
             <b className="text-foreground">WebMCP changes the lesson.</b> The agent can inspect the live model and guide without bypassing the exercise rules.
           </p>
         </div>
@@ -313,7 +311,7 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
               type="button"
               key={role.id}
               onClick={() => onPickRole(role.id)}
-              className="w-full rounded-lg border border-border bg-muted/10 p-3 text-left transition hover:border-[#43515a] hover:bg-accent"
+              className="w-full rounded-md border border-border bg-muted/10 p-3 text-left transition hover:border-[#525252] hover:bg-accent"
             >
               <span className="block text-[12px] font-semibold">{role.label}</span>
               <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
@@ -349,7 +347,7 @@ function MissionControl({
       className={`flex min-h-16 flex-col items-start justify-between rounded-lg border p-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-35 ${
         active
           ? "border-cyan/50 bg-cyan/10 text-cyan"
-          : "border-border bg-muted/15 text-muted-foreground hover:border-[#43515a] hover:bg-accent hover:text-foreground"
+          : "border-border bg-muted/15 text-muted-foreground hover:border-[#525252] hover:bg-accent hover:text-foreground"
       }`}
     >
       <Icon className="size-4" aria-hidden="true" />
