@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import type { Stage, Vec3 } from "@layer0/scene-render";
 
 export interface Marker {
@@ -13,9 +13,9 @@ export interface Marker {
 
 const TONE: Record<NonNullable<Marker["tone"]>, string> = {
   neutral: "border-border bg-background/85 text-foreground",
-  cool: "border-sky-500/50 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  warm: "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  alert: "border-red-500/60 bg-red-500/10 text-red-700 dark:text-red-300",
+  cool: "border-interactive/50 bg-interactive/10 text-interactive",
+  warm: "border-warning/50 bg-warning/10 text-warning",
+  alert: "border-destructive/60 bg-destructive/10 text-destructive",
 };
 
 /**
@@ -26,6 +26,10 @@ const TONE: Record<NonNullable<Marker["tone"]>, string> = {
  * each frame and letting the DOM draw the label keeps type crisp at any zoom
  * and keeps the labels themselves selectable, which matters more here than
  * having them live in the 3D scene.
+ *
+ * Positions are written straight to each node's transform inside the rAF loop.
+ * Routing them through React state would re-render the tree every frame, and
+ * animating `left`/`top` forces layout while the 3D canvas is already painting.
  */
 export function ViewerMarkers({
   getStage,
@@ -34,7 +38,7 @@ export function ViewerMarkers({
   getStage: () => Stage | null;
   markers: Marker[];
 }) {
-  const [screen, setScreen] = useState<Record<string, { x: number; y: number }>>({});
+  const nodes = useRef(new Map<string, HTMLElement>());
   const latest = useRef(markers);
   useEffect(() => {
     latest.current = markers;
@@ -45,12 +49,17 @@ export function ViewerMarkers({
     const loop = () => {
       const stage = getStage();
       if (stage) {
-        const next: Record<string, { x: number; y: number }> = {};
         for (const m of latest.current) {
+          const el = nodes.current.get(m.id);
+          if (!el) continue;
           const p = stage.project(m.point);
-          if (p) next[m.id] = p;
+          if (p) {
+            el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) translate(-50%, -100%)`;
+            el.style.visibility = "visible";
+          } else {
+            el.style.visibility = "hidden";
+          }
         }
-        setScreen(next);
       }
       raf = requestAnimationFrame(loop);
     };
@@ -58,30 +67,35 @@ export function ViewerMarkers({
     return () => cancelAnimationFrame(raf);
   }, [getStage]);
 
+  const setNode = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) nodes.current.set(id, el);
+    else nodes.current.delete(id);
+  }, []);
+
   return (
     // LMV gives its own canvas layers a stacking order inside the viewer
     // container, so the label layer has to sit explicitly above them.
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       {markers.map((m) => {
-        const p = screen[m.id];
-        if (!p) return null;
-        const className = `absolute -translate-x-1/2 -translate-y-full rounded border px-2 py-1 text-[10px] leading-tight shadow-lg backdrop-blur-sm ${
-          m.onSelect ? "pointer-events-auto transition hover:scale-105" : ""
+        const className = `invisible absolute left-0 top-0 rounded border px-2 py-1 text-[12px] leading-[1.4] shadow-lg backdrop-blur-sm ${
+          m.onSelect
+            ? "pointer-events-auto transition-[scale] hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            : ""
         } ${TONE[m.tone ?? "neutral"]}`;
         return m.onSelect ? (
           <button
             key={m.id}
+            ref={(el) => setNode(m.id, el)}
             type="button"
             data-viewer-marker={m.id}
             aria-label={`Select ${m.id}`}
             onClick={m.onSelect}
-            style={{ left: p.x, top: p.y }}
             className={className}
           >
             {m.children}
           </button>
         ) : (
-          <div key={m.id} style={{ left: p.x, top: p.y }} className={className}>
+          <div key={m.id} ref={(el) => setNode(m.id, el)} className={className}>
             {m.children}
           </div>
         );

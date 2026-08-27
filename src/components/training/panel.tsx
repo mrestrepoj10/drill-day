@@ -4,6 +4,7 @@ import Image from "next/image";
 import {
   ArrowRight,
   Bot,
+  CheckCircle2,
   ChevronDown,
   Eye,
   Lightbulb,
@@ -16,6 +17,13 @@ import type { TrainingSession } from "@layer0/viewer-training";
 import { ROOMS } from "@/lib/training/facility";
 import { ROLES } from "@/lib/training/missions";
 import { FloorPlan } from "@/components/training/plan";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const FLAGSHIP_STAGES = [
   { label: "Navigate", detail: "Find Room 214" },
@@ -44,9 +52,9 @@ export function TrainingPanel({
 }) {
   const step = session.step;
   const mission = session.mission;
-  const lastVerdict = [...session.decisions]
-    .reverse()
-    .find((decision) => decision.verdict && decision.kind !== "hint");
+  const lastVerdict = session.decisions.findLast(
+    (decision) => decision.verdict && decision.kind !== "hint",
+  );
   const highlighted = session.revealed.flatMap((hint) => hint.reveals ?? []);
   const stages =
     mission?.id === "m-technician"
@@ -67,32 +75,29 @@ export function TrainingPanel({
       ) : (
         <>
           <header className="border-b border-border px-5 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="eyebrow text-cyan">Live incident · 07:42</div>
-                <h1 className="mt-2 text-xl font-semibold tracking-[-0.03em]">
-                  {mission.title}
-                </h1>
-              </div>
-              <span className="text-[11px] text-muted-foreground">
-                {mission.author === "agent" ? "Written by the agent" : "Built in"}
+            <h1 className="text-balance text-[18px] font-semibold leading-[1.25] tracking-[-0.02em]">
+              {mission.title}
+            </h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[1.4] text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-success">
+                <span className="size-1.5 rounded-full bg-success" aria-hidden="true" /> Live · 07:42
+              </span>
+              <span>Northgate Data &amp; Logistics</span>
+              <span className="text-text-tertiary">
+                {mission.author === "agent" ? "Agent-authored" : "Built-in scenario"}
               </span>
             </div>
-            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-              Northgate Data &amp; Logistics · Level {session.level}
-            </p>
-          </header>
 
-          <section className="border-b border-border px-5 py-4" aria-label="Mission progress">
-            <ol className="space-y-3">
+            <ol className="mt-3 flex items-center gap-1.5" aria-label="Mission progress">
               {stages.map((stage, index) => {
                 const cleared = session.progress[index]?.cleared;
                 const current = index === session.stepIndex && session.status === "running";
                 return (
-                  <li key={`${stage.label}-${index}`} className="flex items-center gap-3">
+                  <li key={`${stage.label}-${index}`} className="flex min-w-0 items-center gap-1.5">
+                    {index > 0 ? <span className="h-px w-3 shrink-0 bg-border" aria-hidden="true" /> : null}
                     <span
                       aria-hidden="true"
-                      className={`flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] font-semibold ${
+                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-semibold ${
                         cleared
                           ? "border-success/40 bg-success/15 text-success"
                           : current
@@ -102,43 +107,46 @@ export function TrainingPanel({
                     >
                       {cleared ? "✓" : index + 1}
                     </span>
-                    <span className="min-w-0">
-                      <span className={`block text-[13px] font-semibold ${current ? "text-foreground" : "text-muted-foreground"}`}>
-                        {stage.label}
-                        {current ? <span className="sr-only">, current step</span> : null}
-                      </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {stage.detail}
-                      </span>
+                    <span
+                      className={`truncate text-[11px] font-semibold ${current ? "text-foreground" : "text-muted-foreground"}`}
+                    >
+                      {stage.label}
+                      {current ? <span className="sr-only">, current step</span> : null}
+                      {cleared ? <span className="sr-only">, cleared</span> : null}
                     </span>
                   </li>
                 );
               })}
             </ol>
-          </section>
+          </header>
 
-          <section className="border-b border-border px-5 py-5">
+          <section className="border-b border-border px-5 py-4">
             {step ? (
               <>
-                <div className="eyebrow text-muted-foreground">
-                  Step {session.stepIndex + 1} · {step.mode === "reach" ? "Navigate" : "Select component"}
-                </div>
-                <p className="mt-3 text-[16px] font-medium leading-[1.5] tracking-[-0.01em]">
+                <h2 className="text-[13px] font-semibold leading-[1.4]">
+                  Step {session.stepIndex + 1} — {step.mode === "reach" ? "Navigate" : "Select component"}
+                </h2>
+                <p className="mt-2 text-pretty text-[15px] font-medium leading-[1.5] tracking-[-0.01em]">
                   {clearerPrompt(mission.id, session.stepIndex, step.prompt)}
                 </p>
                 {step.allowedTools ? (
-                  <div className="mt-4 flex gap-2.5 rounded-xl border border-amber/30 bg-amber/8 p-3 text-amber">
-                    <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                    <p className="text-[12px] leading-relaxed">
-                      <b>Search is disabled.</b> The learner and agent must reason from the building, hints, and system context.
-                    </p>
+                  <div className="mt-3 flex gap-2.5 rounded-lg border border-warning/30 bg-warning/8 p-3">
+                    <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+                    <div>
+                      <p className="text-[13px] font-semibold leading-[1.4] text-warning">Search is disabled</p>
+                      <p className="mt-1 text-pretty text-[12px] leading-[1.5] text-muted-foreground">
+                        The learner and agent must reason from the building, hints, and system context.
+                      </p>
+                    </div>
                   </div>
                 ) : null}
               </>
             ) : (
               <div>
-                <div className="eyebrow text-success">Mission complete</div>
-                <p className="mt-3 text-[15px] leading-relaxed">{summarise(session)}</p>
+                <div className="flex items-center gap-2 text-[13px] font-semibold text-success">
+                  <CheckCircle2 className="size-4" aria-hidden="true" /> Mission complete
+                </div>
+                <p className="mt-2 text-pretty text-[15px] leading-[1.5]">{summarise(session)}</p>
               </div>
             )}
           </section>
@@ -146,15 +154,15 @@ export function TrainingPanel({
           {lastVerdict?.verdict ? (
             <section
               aria-live="polite"
-              className={`border-b border-border px-5 py-4 ${
+              className={`surface-pop border-b border-border px-5 py-4 ${
                 lastVerdict.verdict.kind === "correct"
                   ? "bg-success/6"
                   : lastVerdict.verdict.kind === "near"
-                    ? "bg-amber/6"
+                    ? "bg-warning/6"
                     : "bg-destructive/6"
               }`}
             >
-              <div className="eyebrow text-muted-foreground">Latest feedback</div>
+              <h2 className="text-[13px] font-semibold leading-[1.4]">Latest feedback</h2>
               <p className="mt-2 text-[13px] font-semibold leading-relaxed">
                 {lastVerdict.verdict.message}
               </p>
@@ -193,54 +201,64 @@ export function TrainingPanel({
             </div>
           </section>
 
-          <section className="border-b border-border px-5 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="eyebrow text-muted-foreground">Live floor plan</div>
-                <p className="mt-1.5 text-[12px] text-foreground">
+          <Collapsible className="border-b border-border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-5 py-3.5 text-left transition-colors hover:bg-surface-hover">
+              <span>
+                <span className="block text-[13px] font-semibold leading-[1.4]">Live floor plan</span>
+                <span className="mt-0.5 block text-[12px] leading-[1.4] text-muted-foreground">
                   {session.room
                     ? ROOMS.find((room) => room.id === session.room)?.name
                     : "Outside the building"}
-                </p>
-              </div>
-              <span className="flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground">
-                <MapPinned className="size-3" aria-hidden="true" /> level {session.level}
+                </span>
               </span>
-            </div>
-            <div className="mt-3 overflow-hidden rounded-xl border border-border bg-[#0a0f12] p-2">
-              <FloorPlan
-                level={session.level}
-                position={session.position}
-                room={session.room}
-                highlighted={highlighted}
-                trail={session.trail}
-              />
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              Position and route are live. Reach objectives must be walked in the 3D scene.
-            </p>
-          </section>
+              <span className="flex items-center gap-2 text-[11px] text-text-tertiary">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={-1} className="flex items-center gap-1.5">
+                      <MapPinned className="size-3" aria-hidden="true" /> level {session.level}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-52 text-pretty">
+                    Position and route are live. Reach objectives must be walked in the 3D scene.
+                  </TooltipContent>
+                </Tooltip>
+                <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-5 pb-4">
+              <div className="overflow-hidden rounded-xl border border-border bg-viewer-surface p-2">
+                <FloorPlan
+                  level={session.level}
+                  position={session.position}
+                  room={session.room}
+                  highlighted={highlighted}
+                  trail={session.trail}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {session.coaching.length ? (
-            <section className="border-b border-border px-5 py-4">
+            <section className="surface-pop border-b border-border px-5 py-4">
               <div className="mb-2 flex items-center gap-2">
-                <Bot className="size-4 text-cyan" aria-hidden="true" />
-                <div className="eyebrow text-muted-foreground">Coach</div>
+                <Bot className="size-4 text-muted-foreground" aria-hidden="true" />
+                <h2 className="text-[13px] font-semibold leading-[1.4]">Coach</h2>
               </div>
-              <p className="text-[12px] leading-relaxed text-muted-foreground">
+              <p className="text-pretty text-[12px] leading-[1.5] text-muted-foreground">
                 {session.coaching.at(-1)?.text}
               </p>
             </section>
           ) : null}
 
           <div className="mt-auto p-4">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => onPickRole("")}
-              className="h-10 w-full rounded-lg border border-border text-[12px] font-medium text-muted-foreground transition hover:border-[#43515a] hover:bg-accent hover:text-foreground"
+              className="h-10 w-full text-[12px] font-medium text-muted-foreground hover:text-foreground"
             >
               Change training scenario
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -270,63 +288,64 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
       </div>
 
       <section className="px-5 py-5">
-        <div className="eyebrow text-muted-foreground">Northgate Data &amp; Logistics</div>
-        <h1 className="mt-3 text-[26px] font-semibold leading-[1.08] tracking-[-0.045em]">
+        <h1 className="text-balance text-[24px] font-semibold leading-[1.15] tracking-[-0.03em]">
           Train inside the building—not from a manual.
         </h1>
-        <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+        <div className="mt-2 text-[12px] leading-[1.4] text-text-tertiary">Northgate Data &amp; Logistics</div>
+        <p className="mt-3 max-w-[42ch] text-pretty text-[14px] leading-[1.5] text-muted-foreground">
           Walk to Room 214, diagnose a chilled-water leak, and isolate the right valve. Your agent shares the live scene, coaches the learner, and can author the next drill.
         </p>
 
         <ol className="mt-5 grid grid-cols-3 divide-x divide-border border-y border-border" aria-label="Drill stages">
           {FLAGSHIP_STAGES.map((stage, index) => (
             <li key={stage.label} className="px-2.5 py-3 first:pl-0 last:pr-0">
-              <span className="block text-[12px] font-semibold">{stage.label}</span>
-              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{stage.detail}</span>
+              <span className="block text-[13px] font-semibold leading-[1.4]">{stage.label}</span>
+              <span className="mt-1 block text-[12px] leading-[1.4] text-muted-foreground">{stage.detail}</span>
               <span className="sr-only">Step {index + 1}</span>
             </li>
           ))}
         </ol>
 
-        <button
+        <Button
           type="button"
           onClick={() => onPickRole("technician")}
-          className="group mt-5 flex h-11 w-full items-center justify-between rounded-md bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition hover:bg-white"
+          className="group mt-5 h-11 w-full justify-between px-4 text-[13px] font-semibold hover:bg-white"
         >
           <span className="flex items-center gap-2">
             <Timer className="size-4" aria-hidden="true" /> Start the 90-second drill
           </span>
           <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-        </button>
+        </Button>
 
         <div className="mt-4 border-t border-border pt-4">
-          <p className="text-[12px] leading-relaxed text-muted-foreground">
+          <p className="text-pretty text-[13px] leading-[1.5] text-muted-foreground">
             <b className="text-foreground">WebMCP changes the lesson.</b> The agent can inspect the live model and guide without bypassing the exercise rules.
           </p>
         </div>
       </section>
 
-      <details className="group border-t border-border px-5 py-4">
-        <summary className="flex list-none items-center justify-between text-[12px] font-semibold text-muted-foreground transition hover:text-foreground">
+      <Collapsible className="border-t border-border">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between px-5 py-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
           Explore six more roles
-          <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
-        </summary>
-        <div className="mt-3 space-y-2">
+          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2 px-5 pb-4">
           {otherRoles.map((role) => (
-            <button
+            <Button
               type="button"
               key={role.id}
+              variant="outline"
               onClick={() => onPickRole(role.id)}
-              className="w-full rounded-md border border-border bg-muted/10 p-3 text-left transition hover:border-[#525252] hover:bg-accent"
+              className="h-auto w-full flex-col items-start gap-1 bg-muted/10 p-3 text-left font-normal"
             >
-              <span className="block text-[12px] font-semibold">{role.label}</span>
-              <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+              <span className="text-[13px] font-semibold leading-[1.4]">{role.label}</span>
+              <span className="whitespace-normal text-pretty text-[12px] leading-[1.5] text-muted-foreground">
                 {role.blurb}
               </span>
-            </button>
+            </Button>
           ))}
-        </div>
-      </details>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
@@ -345,20 +364,21 @@ function MissionControl({
   active?: boolean;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
-      className={`flex min-h-16 flex-col items-start justify-between rounded-lg border p-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-35 ${
+      className={`h-auto min-h-16 flex-col items-start justify-between gap-2 p-2.5 text-left font-normal ${
         active
-          ? "border-cyan/50 bg-cyan/10 text-cyan"
-          : "border-border bg-muted/15 text-muted-foreground hover:border-[#525252] hover:bg-accent hover:text-foreground"
+          ? "border-foreground/40 bg-muted text-foreground"
+          : "bg-muted/15 text-muted-foreground hover:text-foreground"
       }`}
     >
       <Icon className="size-4" aria-hidden="true" />
-      <span className="mt-2 text-[10px] font-semibold leading-tight">{label}</span>
-    </button>
+      <span className="whitespace-normal text-[12px] font-semibold leading-[1.3]">{label}</span>
+    </Button>
   );
 }
 

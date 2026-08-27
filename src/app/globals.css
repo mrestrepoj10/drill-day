@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -16,40 +20,90 @@
   --color-destructive: var(--destructive);
   --color-panel: var(--panel);
   --color-panel-raised: var(--panel-raised);
-  --color-cyan: var(--cyan);
-  --color-amber: var(--amber);
+  --color-surface-hover: var(--surface-hover);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-interactive: var(--interactive);
+  --color-warning: var(--warning);
   --color-success: var(--success);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-viewer-surface: var(--viewer-surface);
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-input: var(--input);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
+:root,
+.dark {
   color-scheme: dark;
+  --workspace-header-height: 56px;
   /* Keep the neutral Layer0/shadcn foundation: Geist, hairline borders,
-     monochrome controls. Cyan and amber remain semantic signals, not chrome. */
-  --background: #0a0a0a;
+     monochrome controls, and colors with one meaning each: monochrome for
+     state and chrome, blue only for links and agent accents, warning/success/
+     destructive for verdicts. */
+  --background: #000000;
   --foreground: #ededed;
-  --card: #111111;
+  --card: #0a0a0a;
   --card-foreground: #ededed;
-  --panel: #0d0d0d;
-  --panel-raised: #171717;
-  --muted: #242424;
-  --muted-foreground: #a1a1aa;
-  --accent: #262626;
+  --popover: #111111;
+  --popover-foreground: #ededed;
+  --panel: #0a0a0a;
+  --panel-raised: #111111;
+  --muted: #191919;
+  --muted-foreground: #a1a1a1;
+  --text-tertiary: #8f8f8f;
+  --surface-hover: #1a1a1a;
+  --accent: #1a1a1a;
   --accent-foreground: #fafafa;
-  --border: rgba(255, 255, 255, 0.1);
-  --ring: #a1a1aa;
+  --border: #2e2e2e;
+  --input: #333333;
+  --ring: #52a8ff;
   --primary: #ededed;
   --primary-foreground: #171717;
-  --destructive: #ff6b66;
-  --cyan: #74d7d3;
-  --amber: #f2bd68;
-  --success: #69d49a;
-}
-
-* {
-  box-sizing: border-box;
-  border-color: var(--border);
+  --secondary: #191919;
+  --secondary-foreground: #ededed;
+  --interactive: #52a8ff;
+  --warning: #f5a623;
+  --destructive: #ff7b72;
+  --success: #6fcf97;
+  --viewer-surface: #0b1114;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #171717;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #2e2e2e;
+  --sidebar-ring: #52a8ff;
 }
 
 html,
@@ -60,25 +114,9 @@ body {
 body {
   margin: 0;
   overflow: hidden;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-button,
-a,
-input,
-select {
-  outline: none;
-}
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible {
-  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 button:not(:disabled),
@@ -87,79 +125,219 @@ a {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--cyan) 34%, transparent);
+  background: color-mix(in srgb, var(--interactive) 34%, transparent);
 }
 
 .app-shell {
   display: grid;
-  min-height: 100dvh;
-  grid-template-rows: 58px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: var(--workspace-header-height) minmax(0, 1fr);
   background: var(--background);
 }
 
+.workspace-navbar {
+  position: relative;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+  padding: 0 1.125rem;
+}
+
+.workspace-navbar-start,
+.workspace-navbar-actions,
+.workspace-brand,
+.workspace-navbar-links {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-navbar-start {
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.workspace-brand {
+  min-width: 0;
+  gap: 0.55rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-decoration: none;
+}
+
+.workspace-brand-mark {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.35rem;
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.workspace-brand-separator {
+  height: 1rem;
+  align-self: center;
+}
+
+.workspace-product-badge {
+  height: 1.25rem;
+  border-color: var(--border);
+  padding-inline: 0.45rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+}
+
+.workspace-navbar-links {
+  gap: 0.125rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--panel);
+  padding: 0.1875rem;
+}
+
+.workspace-navbar-link {
+  height: 1.625rem;
+  border-radius: 0.375rem;
+  padding-inline: 0.625rem;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+.workspace-navbar-actions {
+  justify-self: end;
+  gap: 0.375rem;
+}
+
+.workspace-source-action {
+  color: var(--muted-foreground);
+}
+
+.workspace-source-action:hover {
+  color: var(--foreground);
+}
+
+/* The viewer is the one always-on surface. The mission panel joins it in-flow
+   only on wide screens; the agent console is an overlay drawer at every width. */
 .workspace-grid {
+  position: relative;
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(320px, 350px) minmax(560px, 1fr) minmax(330px, 375px);
   overflow: hidden;
-  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1500px) {
+  .workspace-grid {
+    grid-template-columns: minmax(330px, 380px) minmax(0, 1fr);
+  }
 }
 
 .glass-panel {
   background: var(--panel);
 }
 
-.workspace-pane-trigger {
-  display: none;
-  height: 2rem;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 0.45rem;
-  background: var(--panel-raised);
-  padding: 0 0.65rem;
-  color: var(--muted-foreground);
-  font-size: 0.68rem;
-  font-weight: 550;
-  transition: background-color 140ms ease, color 140ms ease, transform 100ms ease-out;
+/* Overlay drawer shared look (mission below 1500px, activity always). */
+.workspace-mission,
+.workspace-activity {
+  position: fixed;
+  z-index: 50;
+  top: var(--workspace-header-height);
+  bottom: 0;
+  height: auto;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(20px) saturate(120%);
+  visibility: hidden;
+  transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 260ms;
+  will-change: transform;
 }
 
-.workspace-pane-trigger:hover,
-.workspace-pane-trigger[aria-expanded="true"] {
-  background: var(--accent);
+.workspace-mission {
+  left: 0;
+  width: min(352px, calc(100vw - 1rem));
+  border-right: 1px solid var(--border);
+  box-shadow: 24px 0 56px rgba(0, 0, 0, 0.32);
+  transform: translate3d(-100%, 0, 0);
+}
+
+.workspace-activity {
+  right: 0;
+  width: min(378px, calc(100vw - 1rem));
+  border-left: 1px solid var(--border);
+  box-shadow: -24px 0 56px rgba(0, 0, 0, 0.32);
+  transform: translate3d(100%, 0, 0);
+}
+
+.workspace-mission[data-compact-open="true"],
+.workspace-activity[data-compact-open="true"] {
+  transform: translate3d(0, 0, 0);
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+@media (min-width: 1500px) {
+  .workspace-mission {
+    position: static;
+    width: auto;
+    transform: none;
+    visibility: visible;
+    background: var(--panel);
+    box-shadow: none;
+    backdrop-filter: none;
+    transition: none;
+    will-change: auto;
+  }
+}
+
+/* Occasional surfaces (toasts, verdicts, feed rows) arrive with a soft
+   fade-and-rise instead of popping in. */
+.surface-pop {
+  transition: opacity 180ms ease-out, translate 180ms ease-out;
+
+  @starting-style {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+/* Verdict tones for viewer notices: one meaning per color, mixed from tokens. */
+.tone-neutral {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--background) 95%, transparent);
   color: var(--foreground);
 }
 
-.workspace-pane-trigger:active {
-  transform: scale(0.97);
+.tone-good {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 14%, var(--background));
+  color: var(--success);
 }
 
-.eyebrow {
-  font-family: var(--font-geist-sans), Arial, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  line-height: 1.25;
+.tone-near {
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  background: color-mix(in srgb, var(--warning) 14%, var(--background));
+  color: var(--warning);
 }
 
-.keycap {
-  display: inline-flex;
-  min-width: 1.65rem;
-  height: 1.55rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #40505a;
-  border-bottom-width: 2px;
-  border-radius: 0.35rem;
-  background: rgba(10, 15, 18, 0.88);
-  color: #dbe4e4;
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 0.68rem;
-  line-height: 1;
+.tone-bad {
+  border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
+  background: color-mix(in srgb, var(--destructive) 14%, var(--background));
+  color: var(--destructive);
 }
 
 .viewer-surface .adsk-viewing-viewer {
-  background: #0b1114 !important;
+  background: var(--viewer-surface) !important;
 }
 
 .viewer-surface canvas {
@@ -171,112 +349,86 @@ a {
   scrollbar-width: thin;
 }
 
-@media (max-width: 1180px) {
-  .workspace-grid {
-    grid-template-columns: minmax(310px, 350px) minmax(0, 1fr);
+@keyframes live-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent);
   }
-
-  .workspace-activity-trigger {
-    display: inline-flex;
-  }
-
-  .workspace-activity {
-    position: fixed;
-    z-index: 50;
-    top: 58px;
-    right: 0;
-    bottom: 0;
-    width: min(375px, calc(100vw - 1rem));
-    height: auto;
-    border-left: 1px solid var(--border);
-    background: color-mix(in srgb, var(--panel) 94%, transparent);
-    box-shadow: -24px 0 56px rgba(0, 0, 0, 0.32);
-    backdrop-filter: blur(20px) saturate(120%);
-    transform: translate3d(100%, 0, 0);
-    visibility: hidden;
-    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 260ms;
-    will-change: transform;
-  }
-
-  .workspace-activity[data-compact-open="true"] {
-    transform: translate3d(0, 0, 0);
-    visibility: visible;
-    transition-delay: 0s;
+  60% {
+    box-shadow: 0 0 0 5px transparent;
   }
 }
 
+.workspace-live-dot[data-unseen="true"] {
+  animation: live-dot-pulse 1.6s ease-out infinite;
+}
+
 @media (max-width: 820px) {
-  .workspace-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+  .workspace-navbar-links {
+    display: none;
   }
 
-  .workspace-mission-trigger {
-    display: inline-flex;
-  }
-
-  .workspace-viewer {
-    grid-column: 1;
-    grid-row: 1;
-    min-height: 0;
+  .workspace-navbar {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .workspace-mission {
-    position: fixed;
-    z-index: 50;
-    top: 58px;
-    bottom: 0;
-    left: 0;
-    width: min(350px, calc(100vw - 1rem));
-    height: auto;
-    border-right: 1px solid var(--border);
-    background: color-mix(in srgb, var(--panel) 94%, transparent);
-    box-shadow: 24px 0 56px rgba(0, 0, 0, 0.32);
-    backdrop-filter: blur(20px) saturate(120%);
-    transform: translate3d(-100%, 0, 0);
-    visibility: hidden;
-    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 260ms;
-    will-change: transform;
-  }
-
-  .workspace-mission[data-compact-open="true"] {
-    transform: translate3d(0, 0, 0);
-    visibility: visible;
-    transition-delay: 0s;
+    width: min(326px, calc(100vw - 1rem));
   }
 }
 
 @media (max-width: 560px) {
-  .app-shell > header {
+  .workspace-navbar {
     gap: 0.5rem;
     padding-inline: 0.75rem;
   }
 
-  .workspace-tagline,
-  .workspace-trigger-label,
-  .workspace-source-label,
-  .workspace-live-dot {
+  .workspace-brand-separator,
+  .workspace-product-badge,
+  .workspace-trigger-label {
     display: none;
   }
 
-  .workspace-pane-trigger {
-    width: 2rem;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .app-shell > header a {
-    width: 2rem;
-    justify-content: center;
-    padding-inline: 0;
+  input,
+  select {
+    font-size: 1rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-mission,
-  .workspace-activity,
-  .workspace-pane-trigger {
-    transition-duration: 1ms;
+  /* Gentler, non-vestibular equivalents: drawers cross-fade in place. */
+  .workspace-activity {
+    transform: none !important;
+    opacity: 0;
+    transition: opacity 150ms ease, visibility 0s linear 150ms;
+  }
+
+  .workspace-activity[data-compact-open="true"] {
+    opacity: 1;
+  }
+
+  .surface-pop {
+    transition: opacity 150ms ease;
+
+    @starting-style {
+      translate: none;
+    }
+  }
+
+  .workspace-live-dot[data-unseen="true"] {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 1499.98px) {
+  .workspace-mission {
+    transform: none !important;
+    opacity: 0;
+    transition: opacity 150ms ease, visibility 0s linear 150ms;
+  }
+
+  .workspace-mission[data-compact-open="true"] {
+    opacity: 1;
   }
 }
 
@@ -285,5 +437,17 @@ a {
   .workspace-activity {
     background: var(--panel);
     backdrop-filter: none;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }

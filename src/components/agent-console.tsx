@@ -13,15 +13,41 @@ import {
   Footprints,
   ShieldAlert,
   Wrench,
+  X,
 } from "lucide-react";
-import { useModelContext, type RegisteredTool, type ToolCall } from "@layer0/webmcp";
+import type { ModelContextFlavor, RegisteredTool, ToolCall } from "@layer0/webmcp";
 import type { Decision, TrainingSession } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, ROOMS } from "@/lib/training/facility";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface Drill {
   label: string;
   hint: string;
   steps: { tool: string; input?: Record<string, unknown>; pause?: number }[];
+}
+
+export interface AgentConsoleContext {
+  flavor: ModelContextFlavor;
+  tools: RegisteredTool[];
+  calls: readonly ToolCall[];
+  run: (name: string, input?: object) => Promise<string>;
+  clear: () => void;
 }
 
 type TimelineEvent = {
@@ -41,14 +67,18 @@ export function AgentConsole({
   drills = [],
   namespace,
   session,
+  context,
   compactOpen,
+  onClose,
 }: {
   drills?: Drill[];
   namespace: string;
   session: TrainingSession;
+  context: AgentConsoleContext;
   compactOpen: boolean;
+  onClose: () => void;
 }) {
-  const { flavor, tools, calls, run, clear } = useModelContext();
+  const { flavor, tools, calls, run, clear } = context;
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<"activity" | "tools">("activity");
@@ -86,44 +116,55 @@ export function AgentConsole({
     <aside
       id="agent-console"
       data-compact-open={compactOpen}
-      className="workspace-activity glass-panel flex h-full min-h-0 flex-col border-l border-border"
+      className="workspace-activity glass-panel flex h-full min-h-0 flex-col"
     >
-      <header className="border-b border-border px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <span className={`size-2 rounded-full ${flavor === "native" ? "bg-success" : "bg-amber"}`} />
-          <div>
-            <div className="text-[12px] font-semibold">Agent activity</div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
-              {flavor === "native" ? "Native WebMCP" : "WebMCP polyfill"} · {mine.length} tools discoverable
-            </div>
+      <header className="flex items-start gap-2 border-b border-border py-3 pl-4 pr-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              tabIndex={-1}
+              className={`mt-1.5 size-2 rounded-full ${flavor === "native" ? "bg-success" : "bg-warning"}`}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6} className="max-w-52 text-pretty">
+            Human choices, scene events, and every agent tool call share one audit trail.
+          </TooltipContent>
+        </Tooltip>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold leading-[1.4]">Agent activity</div>
+          <div className="mt-0.5 text-[12px] leading-[1.4] text-muted-foreground">
+            {flavor === "native" ? "Native WebMCP" : "WebMCP polyfill"} · {mine.length} tools discoverable
           </div>
-          <span className="ml-auto text-[11px] text-success">Live</span>
         </div>
-        <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
-          Human choices, scene events, and every agent tool call share one audit trail.
-        </p>
+        <span className="mt-0.5 text-[12px] font-medium text-success">Live</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close agent activity"
+          onClick={onClose}
+        >
+          <X className="size-3.5" aria-hidden="true" />
+        </Button>
       </header>
 
-      <div role="tablist" aria-label="Agent console" className="flex border-b border-border p-1.5 text-[11px]">
-        {(["activity", "tools"] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="tab"
-            aria-selected={tab === item}
-            onClick={() => setTab(item)}
-            className={`flex-1 rounded-md px-3 py-2 capitalize transition ${
-              tab === item ? "bg-accent font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {item === "activity" ? "Activity" : `Site tools · ${mine.length}`}
-            {item === "activity" && events.length ? <span className="ml-1 text-muted-foreground">{events.length}</span> : null}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value === "tools" ? "tools" : "activity")}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="border-b border-border p-1.5">
+          <TabsList className="w-full">
+            <TabsTrigger value="activity" className="text-[12px]">
+              Activity{events.length ? <span className="text-muted-foreground">{events.length}</span> : null}
+            </TabsTrigger>
+            <TabsTrigger value="tools" className="text-[12px]">
+              Site tools · {mine.length}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      {tab === "tools" ? (
-        <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+        <TabsContent value="tools" className="min-h-0 overflow-y-auto scrollbar-thin">
           {mine.map((tool) => (
             <ToolRow
               key={tool.name}
@@ -133,17 +174,45 @@ export function AgentConsole({
               onRun={(input) => run(tool.name, input)}
             />
           ))}
-        </div>
-      ) : (
-        <ActivityFeed
-          events={events}
-          drills={drills}
-          busy={busy}
-          onRunDrill={runDrill}
-          onClearToolHistory={clear}
-        />
-      )}
+        </TabsContent>
+
+        <TabsContent value="activity" className="flex min-h-0 flex-col">
+          <ActivityFeed
+            events={events}
+            drills={drills}
+            busy={busy}
+            onRunDrill={runDrill}
+            onClearToolHistory={clear}
+          />
+        </TabsContent>
+      </Tabs>
     </aside>
+  );
+}
+
+function SuggestedPrompt() {
+  const [copied, setCopied] = useState(false);
+
+  const copyPrompt = async () => {
+    await navigator.clipboard.writeText(SUGGESTED_PROMPT);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <>
+      <p className="text-pretty text-[13px] leading-[1.5] text-foreground">{SUGGESTED_PROMPT}</p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        onClick={copyPrompt}
+        className="mt-2 -ml-2 text-interactive hover:text-foreground"
+      >
+        {copied ? <ClipboardCheck className="size-3" /> : <Clipboard className="size-3" />}
+        {copied ? "Copied" : "Copy prompt"}
+      </Button>
+    </>
   );
 }
 
@@ -161,76 +230,81 @@ function ActivityFeed({
   onClearToolHistory: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "nearest" });
   }, [events.length]);
 
-  const copyPrompt = async () => {
-    await navigator.clipboard.writeText(SUGGESTED_PROMPT);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  };
-
   return (
-    <div role="tabpanel" className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border px-4 py-3">
-        <span className="eyebrow text-muted-foreground">Try with ChatGPT</span>
-        <p className="mt-2 text-[11px] leading-relaxed text-foreground">{SUGGESTED_PROMPT}</p>
-        <button
-          type="button"
-          onClick={copyPrompt}
-          className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-cyan transition hover:text-primary"
-        >
-          {copied ? <ClipboardCheck className="size-3" /> : <Clipboard className="size-3" />}
-          {copied ? "Copied" : "Copy prompt"}
-        </button>
-      </div>
-
+    <div className="flex min-h-0 flex-1 flex-col">
       {events.length ? (
-        <div role="log" aria-live="polite" className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-          {events.map((event) => <TimelineRow key={event.id} event={event} />)}
-          <div ref={endRef} />
-        </div>
+        <>
+          <Collapsible className="border-b border-border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
+              Try with ChatGPT
+              <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-3">
+              <SuggestedPrompt />
+            </CollapsibleContent>
+          </Collapsible>
+          <div role="log" aria-live="polite" className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+            {events.map((event) => <TimelineRow key={event.id} event={event} />)}
+            <div ref={endRef} />
+          </div>
+        </>
       ) : (
-        <div className="grid min-h-36 flex-1 place-items-center px-6 text-center">
-          <div>
+        <div className="grid min-h-36 flex-1 place-items-center px-5 text-center">
+          <div className="max-w-64">
             <Activity className="mx-auto size-5 text-muted-foreground" aria-hidden="true" />
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-pretty text-[12px] leading-[1.5] text-muted-foreground">
               Start the flagship drill or ask ChatGPT to inspect this page. Activity appears here as it happens.
             </p>
+            <div className="mt-4 rounded-md border border-border p-3 text-left">
+              <h2 className="text-[12px] font-semibold leading-[1.4]">Try with ChatGPT</h2>
+              <div className="mt-1.5">
+                <SuggestedPrompt />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {drills.length ? (
-        <details className="border-t border-border px-4 py-3">
-          <summary className="cursor-pointer select-none text-[11px] font-semibold text-muted-foreground hover:text-foreground">
+        <Collapsible className="border-t border-border">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
             Demo rehearsals
-          </summary>
-          <div className="mt-2 space-y-1.5">
+            <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-1.5 px-4 pb-3">
             {drills.map((drill) => (
-              <button
+              <Button
                 key={drill.label}
                 type="button"
+                variant="outline"
                 disabled={!!busy}
                 onClick={() => onRunDrill(drill)}
-                className="w-full rounded-md border border-border bg-muted/20 px-2.5 py-2 text-left transition hover:bg-accent disabled:opacity-40"
+                className="h-auto w-full flex-col items-start gap-0.5 px-2.5 py-2 text-left font-normal"
               >
-                <span className="block text-[11px] font-medium">{busy === drill.label ? "Running…" : drill.label}</span>
-                <span className="mt-0.5 block text-[9px] leading-relaxed text-muted-foreground">{drill.hint}</span>
-              </button>
+                <span className="text-[13px] font-medium leading-[1.4]">
+                  {busy === drill.label ? "Running…" : drill.label}
+                </span>
+                <span className="whitespace-normal text-pretty text-[12px] leading-[1.5] text-muted-foreground">
+                  {drill.hint}
+                </span>
+              </Button>
             ))}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               onClick={onClearToolHistory}
-              className="pt-1 text-[9px] text-muted-foreground hover:text-foreground"
+              className="-ml-2 text-muted-foreground hover:text-foreground"
             >
               Clear tool-call history
-            </button>
-          </div>
-        </details>
+            </Button>
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
     </div>
   );
@@ -250,22 +324,22 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
             : CircleDot;
 
   return (
-    <article className={`border-b border-border/65 px-4 py-3 ${event.tone === "bad" ? "bg-destructive/5" : ""}`}>
+    <article className={`surface-pop border-b border-border/65 px-4 py-3 ${event.tone === "bad" ? "bg-destructive/5" : ""}`}>
       <div className="flex items-start gap-2.5">
         <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border ${toneClass(event.tone)}`}>
           <Icon className="size-3" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground">{event.actor}</span>
-            <time className="ml-auto font-mono text-[9px] text-muted-foreground">{formatTime(event.at)}</time>
+            <span className="text-[12px] font-medium text-muted-foreground">{event.actor}</span>
+            <time className="ml-auto font-mono text-[11px] tabular-nums text-text-tertiary">{formatTime(event.at)}</time>
           </div>
-          <p className="mt-1 text-[11px] font-semibold leading-relaxed">{event.title}</p>
-          {event.detail ? <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{event.detail}</p> : null}
+          <p className="mt-1 text-pretty text-[13px] font-semibold leading-[1.4]">{event.title}</p>
+          {event.detail ? <p className="mt-1 text-pretty text-[12px] leading-[1.5] text-muted-foreground">{event.detail}</p> : null}
           {event.call ? (
             <details className="mt-1.5">
-              <summary className="cursor-pointer text-[9px] text-muted-foreground hover:text-foreground">Technical details</summary>
-              <pre className="mt-1 max-h-28 overflow-auto rounded-md bg-muted/50 p-2 text-[9px] leading-relaxed text-muted-foreground">
+              <summary className="cursor-pointer text-[11px] text-text-tertiary transition-colors hover:text-foreground">Technical details</summary>
+              <pre className="mt-1 max-h-28 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[11px] leading-[1.4] text-muted-foreground">
                 {JSON.stringify({ input: event.call.input, result: event.call.result }, null, 2)}
               </pre>
             </details>
@@ -315,50 +389,54 @@ function ToolRow({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-start gap-2 px-4 py-3 text-left transition hover:bg-accent/50"
+        className="flex w-full items-start gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         {open ? <ChevronDown className="mt-0.5 size-3.5 text-muted-foreground" /> : <ChevronRight className="mt-0.5 size-3.5 text-muted-foreground" />}
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold">{tool.title ?? tool.name}</span>
-          <span className="mt-0.5 block truncate font-mono text-[9px] text-muted-foreground">{tool.name}</span>
+          <span className="block text-[13px] font-semibold leading-[1.4]">{tool.title ?? tool.name}</span>
+          <span className="mt-0.5 block truncate font-mono text-[11px] leading-[1.4] text-text-tertiary">{tool.name}</span>
         </span>
         {tool.annotations?.readOnlyHint ? (
-          <span className="text-[10px] text-muted-foreground">Read only</span>
+          <span className="text-[12px] text-muted-foreground">Read only</span>
         ) : null}
       </button>
       {open ? (
         <div className="space-y-2.5 px-4 pb-4">
-          <p className="text-[10px] leading-relaxed text-muted-foreground">{tool.description}</p>
+          <p className="text-pretty text-[12px] leading-[1.5] text-muted-foreground">{tool.description}</p>
           {Object.entries(props).map(([key, spec]) => (
-            <label key={key} className="block">
-              <span className="font-mono text-[9px] text-muted-foreground">{key}</span>
+            <div key={key} className="space-y-1">
+              <Label htmlFor={`tool-${tool.name}-${key}`} className="font-mono text-[11px] font-normal leading-[1.4] text-text-tertiary">
+                {key}
+              </Label>
               {spec.enum ? (
-                <select
+                <Select
                   value={values[key] ?? ""}
-                  onChange={(event) => setValues({ ...values, [key]: event.target.value })}
-                  className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-[11px]"
+                  onValueChange={(value) => setValues({ ...values, [key]: value })}
                 >
-                  <option value="">—</option>
-                  {spec.enum.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
+                  <SelectTrigger id={`tool-${tool.name}-${key}`} className="w-full text-[13px]">
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {spec.enum.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : (
-                <input
+                <Input
+                  id={`tool-${tool.name}-${key}`}
                   value={values[key] ?? ""}
                   onChange={(event) => setValues({ ...values, [key]: event.target.value })}
                   placeholder={spec.description ?? spec.type ?? "string"}
-                  className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-[11px]"
+                  className="text-[13px]"
                 />
               )}
-            </label>
+            </div>
           ))}
-          {error ? <p className="text-[10px] text-destructive">{error}</p> : null}
-          <button
-            type="button"
-            onClick={submit}
-            className="h-9 w-full rounded-md bg-foreground px-2 text-[11px] font-semibold text-background transition hover:opacity-90"
-          >
+          {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
+          <Button type="button" onClick={submit} className="w-full text-[13px] font-semibold">
             Execute site tool
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>
@@ -421,12 +499,17 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
 
 function toneClass(tone: TimelineEvent["tone"]): string {
   if (tone === "good") return "border-success/35 bg-success/10 text-success";
-  if (tone === "near") return "border-amber/35 bg-amber/10 text-amber";
+  if (tone === "near") return "border-warning/35 bg-warning/10 text-warning";
   if (tone === "bad") return "border-destructive/35 bg-destructive/10 text-destructive";
-  if (tone === "agent") return "border-cyan/35 bg-cyan/10 text-cyan";
   return "border-border bg-muted/40 text-muted-foreground";
 }
 
+const TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
 function formatTime(at: number): string {
-  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(at);
+  return TIME_FORMAT.format(at);
 }

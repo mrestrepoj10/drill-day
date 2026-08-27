@@ -1,12 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Activity,
-  GitFork,
-  MousePointer2,
-  PanelLeft,
-} from "lucide-react";
+import { Activity, Box, MousePointer2, PanelLeft } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -16,7 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Stage } from "@layer0/scene-render";
-import { useModelContextTools } from "@layer0/webmcp";
+import { useModelContext, useModelContextTools } from "@layer0/webmcp";
 import { loadTraining, type TrainingSession, type ViewerTraining } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, EYE, LEVELS, ROOMS, STOREY } from "@/lib/training/facility";
 import { MISSIONS, ROLES } from "@/lib/training/missions";
@@ -26,6 +21,11 @@ import { TrainingPanel } from "@/components/training/panel";
 import { AgentConsole, type Drill } from "@/components/agent-console";
 import { StageStatus, useStage } from "@/components/use-stage";
 import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CUTAWAY_Y = LEVELS * STOREY - 0.6;
 const OVERVIEW = Stage.frame([24, 3, 16], 82, -1.05, 0.66);
@@ -121,8 +121,11 @@ export function TrainingDemo() {
   const [replaying, setReplaying] = useState(false);
   const [notice, setNotice] = useState<PickNotice>();
   const [hover, setHover] = useState<HoverLabel>();
-  const [missionPaneOpen, setMissionPaneOpen] = useState(false);
+  const [missionPaneOpen, setMissionPaneOpen] = useState(true);
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
+
+  const modelContext = useModelContext();
+  const { calls } = modelContext;
 
   const { getStage, status, error } = useStage(containerRef, (stage, handle) => {
     const scene = new TrainingScene(stage);
@@ -152,6 +155,39 @@ export function TrainingDemo() {
   const snapshot = useCallback(() => training?.snapshot() ?? IDLE, [training]);
   const session = useSyncExternalStore(subscribe, snapshot, snapshot);
 
+  // The console is an overlay at every width, closed by default. The first
+  // agent-origin tool call opens it once, so the audit trail arrives as a
+  // moment; after that the navbar badge carries the signal.
+  const agentCallCount = useMemo(
+    () => calls.reduce((count, call) => count + (call.origin === "agent" ? 1 : 0), 0),
+    [calls],
+  );
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (autoOpened.current || agentCallCount === 0) return;
+    autoOpened.current = true;
+    setActivityPaneOpen(true);
+    setMissionPaneOpen(false);
+  }, [agentCallCount]);
+
+  // Everything visible while the pane is open counts as seen; the handlers
+  // that open or close the pane stamp the count, so the closed-state badge
+  // only carries events that arrived since.
+  const eventCount = calls.length + session.decisions.length + session.coaching.length;
+  const [seenCount, setSeenCount] = useState(0);
+  const unseen = activityPaneOpen ? 0 : Math.max(0, eventCount - seenCount);
+
+  const toggleActivityPane = () => {
+    setSeenCount(eventCount);
+    setActivityPaneOpen((open) => !open);
+    setMissionPaneOpen(false);
+  };
+
+  const closeActivityPane = () => {
+    setSeenCount(eventCount);
+    setActivityPaneOpen(false);
+  };
+
   useEffect(() => {
     sceneRef.current?.drawTrail(session.trail);
   }, [session.trail]);
@@ -166,9 +202,17 @@ export function TrainingDemo() {
     if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
   }, []);
 
+  // Latest-value ref so the Escape listener registers once instead of
+  // re-attaching every time an event lands in the feed.
+  const eventCountRef = useRef(eventCount);
+  useEffect(() => {
+    eventCountRef.current = eventCount;
+  });
+
   useEffect(() => {
     const closeCompactPanes = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      setSeenCount(eventCountRef.current);
       setMissionPaneOpen(false);
       setActivityPaneOpen(false);
     };
@@ -322,7 +366,7 @@ export function TrainingDemo() {
   const markers = useMemo<Marker[]>(() => {
     const ids = new Set<string>();
     for (const hint of session.revealed) for (const id of hint.reveals ?? []) ids.add(id);
-    const last = [...session.decisions].reverse().find((decision) => decision.element && decision.verdict);
+    const last = session.decisions.findLast((decision) => decision.element && decision.verdict);
     if (last?.element) ids.add(last.element);
     return [...ids].flatMap((id) => {
       const element = ELEMENT_BY_ID.get(id);
@@ -357,7 +401,7 @@ export function TrainingDemo() {
     ].map(([id, point, label]) => ({
       id: String(id),
       point: point as [number, number, number],
-      children: <span className="font-mono font-bold tracking-[0.08em]">{String(label)}</span>,
+      children: <span className="font-mono font-semibold">{String(label)}</span>,
     }));
   }, [session.level, session.mission]);
 
@@ -366,6 +410,13 @@ export function TrainingDemo() {
   const locationLabel = session.room
     ? ROOMS.find((room) => room.id === session.room)?.name ?? session.room
     : "outside";
+  const destinationLabel = session.step?.validDestination?.room
+    ? ROOMS.find((room) => room.id === session.step?.validDestination?.room)?.name
+    : undefined;
+
+  // The movement tutorial has done its job once the learner has actually
+  // walked; from then on the bar carries only the objective.
+  const hasWalked = session.status === "running" && session.trail.length > 3;
 
   const toggleSection = () => {
     const next = !sectionOn;
@@ -375,19 +426,43 @@ export function TrainingDemo() {
 
   return (
     <div className="app-shell">
-      <header className="flex items-center gap-5 border-b border-border bg-background px-5">
-        <div className="workspace-brand min-w-0">
-          <div className="text-[13px] font-semibold tracking-[-0.01em]">Drill Day</div>
-          <div className="workspace-tagline mt-0.5 text-[11px] text-muted-foreground">AI-guided training in a live building model</div>
+      <header className="workspace-navbar">
+        <div className="workspace-navbar-start">
+          <Link href="/" className="workspace-brand" aria-label="Drill Day home">
+            <span className="workspace-brand-mark" aria-hidden="true">
+              <Box className="size-3.5" strokeWidth={1.8} />
+            </span>
+            <span>Drill Day</span>
+          </Link>
+          <Separator orientation="vertical" className="workspace-brand-separator" />
+          <Badge variant="outline" className="workspace-product-badge">WebMCP</Badge>
         </div>
-        <div className="hidden items-center gap-4 text-[11px] text-muted-foreground lg:flex">
-          <HeaderMeta>Autodesk Scene API</HeaderMeta>
-          <HeaderMeta>WebMCP · 13 site tools</HeaderMeta>
-          <HeaderMeta>Open source · MIT</HeaderMeta>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <button
+
+        <nav className="workspace-navbar-links" aria-label="Project resources">
+          <Button asChild variant="secondary" size="sm" className="workspace-navbar-link">
+            <a href="#training-workspace" aria-current="page">Demo</a>
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="workspace-navbar-link">
+            <Link href="https://github.com/webmachinelearning/webmcp" target="_blank" rel="noreferrer">
+              WebMCP
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="workspace-navbar-link">
+            <Link
+              href="https://aps.autodesk.com/en/docs/viewer/v7/developers_guide/scene_api/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Scene API
+            </Link>
+          </Button>
+        </nav>
+
+        <div className="workspace-navbar-actions">
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             aria-label="Mission"
             aria-controls="mission-panel"
             aria-expanded={missionPaneOpen}
@@ -395,37 +470,52 @@ export function TrainingDemo() {
               setMissionPaneOpen((open) => !open);
               setActivityPaneOpen(false);
             }}
-            className="workspace-pane-trigger workspace-mission-trigger"
+            className="hidden max-[1499px]:inline-flex"
           >
-            <PanelLeft className="size-3.5" aria-hidden="true" /> <span className="workspace-trigger-label">Mission</span>
-          </button>
-          <button
+            <PanelLeft className="size-3.5" aria-hidden="true" />
+            <span className="workspace-trigger-label">Mission</span>
+          </Button>
+          <Button
             type="button"
-            aria-label="Agent activity"
+            variant="outline"
+            size="sm"
+            aria-label={unseen ? `Agent activity, ${unseen} new events` : "Agent activity"}
             aria-controls="agent-console"
             aria-expanded={activityPaneOpen}
-            onClick={() => {
-              setActivityPaneOpen((open) => !open);
-              setMissionPaneOpen(false);
-            }}
-            className="workspace-pane-trigger workspace-activity-trigger"
+            onClick={toggleActivityPane}
           >
-            <span className="workspace-live-dot size-1.5 rounded-full bg-success" aria-hidden="true" />
-            <Activity className="size-3.5" aria-hidden="true" /> <span className="workspace-trigger-label">Activity</span>
-          </button>
-          <Link
-            href="https://github.com/mrestrepoj10/drill-day"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="View source on GitHub"
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
-          >
-            <GitFork className="size-3.5" aria-hidden="true" /> <span className="workspace-source-label">Source</span>
-          </Link>
+            <span
+              className="workspace-live-dot size-1.5 rounded-full bg-success"
+              data-unseen={unseen > 0}
+              aria-hidden="true"
+            />
+            <Activity className="size-3.5" aria-hidden="true" />
+            <span className="workspace-trigger-label">Activity</span>
+            {unseen > 0 ? (
+              <span className="rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-4 text-background">
+                {unseen}
+              </span>
+            ) : null}
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="ghost" size="icon-sm" className="workspace-source-action">
+                <Link
+                  href="https://github.com/mrestrepoj10/drill-day"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="View source on GitHub"
+                >
+                  <GitHubMark />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={6}>View source on GitHub</TooltipContent>
+          </Tooltip>
         </div>
       </header>
 
-      <main className="workspace-grid">
+      <main id="training-workspace" className="workspace-grid">
         <TrainingPanel
           session={session}
           onPickRole={pickRole}
@@ -448,7 +538,7 @@ export function TrainingDemo() {
         <section
           ref={viewerRef}
           aria-label="Interactive building training viewer"
-          className="workspace-viewer viewer-surface relative min-h-0 touch-none overflow-hidden bg-[#0b1114]"
+          className="workspace-viewer viewer-surface relative min-h-0 touch-none overflow-hidden bg-viewer-surface"
           onPointerDownCapture={onPointerDown}
           onPointerMoveCapture={onPointerMove}
           onPointerUpCapture={onPointerUp}
@@ -471,93 +561,109 @@ export function TrainingDemo() {
               className="pointer-events-none absolute z-30 max-w-56 translate-x-3 translate-y-3 rounded-md border border-border bg-background/95 px-2.5 py-2"
               style={{ left: hover.x, top: hover.y }}
             >
-              <div className="text-[11px] font-semibold">{hover.name}</div>
-              <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-cyan">{hover.system} · {hover.id}</div>
+              <div className="text-[13px] font-semibold leading-[1.4]">{hover.name}</div>
+              <div className="mt-0.5 font-mono text-[11px] leading-[1.4] text-text-tertiary">{hover.system} · {hover.id}</div>
             </div>
           ) : null}
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3">
-            <div className="rounded-md border border-border bg-background/90 px-3 py-2 text-[11px]">
-              <span className="font-semibold">{roleLabel ?? "Choose a scenario"}</span>
-              <span className="text-muted-foreground"> · L{session.level} · {locationLabel}</span>
-            </div>
-            <div className="pointer-events-auto flex gap-1 rounded-md border border-border bg-background/90 p-1">
-              {Array.from({ length: LEVELS }, (_, level) => {
-                const locked = session.status === "running" && session.step?.mode === "reach";
-                return (
-                  <button
-                    key={level}
-                    type="button"
-                    aria-pressed={session.level === level}
-                    disabled={locked}
-                    title={locked ? "Level shortcuts are disabled during a navigation objective" : `View level ${level}`}
-                    onClick={() => training?.goToLevel(level)}
-                    className={`rounded-md px-2.5 py-1.5 font-mono text-[10px] transition disabled:cursor-not-allowed disabled:opacity-35 ${
-                      session.level === level ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    }`}
-                  >
-                    L{level}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {notice ? (
-            <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center px-4">
-              <div className={`max-w-lg rounded-md border px-3 py-2 text-center text-[12px] font-medium ${
-                notice.tone === "good"
-                  ? "border-success/40 bg-[#10251b]/95 text-success"
-                  : notice.tone === "near"
-                    ? "border-amber/40 bg-[#2a2113]/95 text-amber"
-                    : notice.tone === "bad"
-                      ? "border-destructive/40 bg-[#2b1617]/95 text-destructive"
-                      : "border-border bg-background/95 text-foreground"
-              }`}>
+            <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-4 z-30 flex justify-center px-4">
+              <div className={`surface-pop max-w-lg rounded-md border px-3 py-2 text-center text-[12px] font-medium tone-${notice.tone}`}>
                 {notice.message}
               </div>
             </div>
           ) : null}
 
           {!notice && replaying ? (
-            <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
-              <div className="rounded-md border border-cyan/30 bg-background/95 px-4 py-2 text-[11px] text-cyan">
+            <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center px-4">
+              <div className="surface-pop rounded-md border border-interactive/30 bg-background/95 px-4 py-2 text-[12px] text-interactive">
                 Replaying the route and every decision in sequence…
               </div>
             </div>
-          ) : !notice && session.status === "running" ? (
-            <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
-              <div
-                aria-label="Viewer controls"
-                className="flex max-w-full flex-wrap items-center justify-center gap-3 rounded-md border border-border bg-background/90 px-3 py-2 text-[11px] text-muted-foreground"
-              >
-                <span className="flex items-center gap-1"><span className="keycap">W</span><span className="keycap">A</span><span className="keycap">S</span><span className="keycap">D</span> walk</span>
-                <span>Drag to look</span>
-                {session.step?.mode === "reach" ? (
-                  <span>Reach the target room</span>
-                ) : (
-                  <span className="flex items-center gap-1"><MousePointer2 className="size-3" aria-hidden="true" /> click a component to answer</span>
-                )}
-              </div>
-            </div>
           ) : null}
+
+          {/* Sits above the Autodesk toolbar, which docks bottom-center at ~60px tall. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-[4.5rem] z-20 flex justify-center px-3">
+            <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-background/90 py-1.5 pl-3 pr-1.5 text-[12px]">
+              <span className="leading-[1.4]">
+                <span className="font-semibold">{roleLabel ?? "Choose a scenario"}</span>
+                <span className="text-muted-foreground"> · L{session.level} · {locationLabel}</span>
+              </span>
+
+              {session.status === "running" && !hasWalked ? (
+                <span className="flex items-center gap-3 text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <KbdGroup>
+                      <Kbd>W</Kbd>
+                      <Kbd>A</Kbd>
+                      <Kbd>S</Kbd>
+                      <Kbd>D</Kbd>
+                    </KbdGroup>
+                    walk
+                  </span>
+                  <span>Drag to look</span>
+                </span>
+              ) : null}
+
+              {session.status === "running" ? (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  {session.step?.mode === "reach" ? (
+                    <>Reach {destinationLabel ?? "the target room"}</>
+                  ) : (
+                    <>
+                      <MousePointer2 className="size-3" aria-hidden="true" /> Click a component to answer
+                    </>
+                  )}
+                </span>
+              ) : null}
+
+              <span className="flex gap-0.5" role="group" aria-label="Levels">
+                {Array.from({ length: LEVELS }, (_, level) => {
+                  const locked = session.status === "running" && session.step?.mode === "reach";
+                  const active = session.level === level;
+                  return (
+                    <Tooltip key={level}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant={active ? "default" : "ghost"}
+                          size="xs"
+                          aria-pressed={active}
+                          disabled={locked}
+                          onClick={() => training?.goToLevel(level)}
+                          className="font-mono text-[11px]"
+                        >
+                          L{level}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" sideOffset={8}>
+                        {locked ? "Level shortcuts are disabled during a navigation objective" : `View level ${level}`}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </span>
+            </div>
+          </div>
         </section>
 
         <AgentConsole
           namespace="training_"
           drills={DRILLS}
           session={session}
+          context={modelContext}
           compactOpen={activityPaneOpen}
+          onClose={closeActivityPane}
         />
       </main>
     </div>
   );
 }
 
-function HeaderMeta({ children }: { children: React.ReactNode }) {
+function GitHubMark() {
   return (
-    <span className="border-l border-border pl-4 first:border-l-0 first:pl-0">
-      {children}
-    </span>
+    <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 .7a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.28-1.7-1.28-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18A11 11 0 0 1 12 6.11c.98 0 1.95.13 2.87.39 2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.71 5.39-5.29 5.68.42.36.79 1.06.79 2.14v3.27c0 .31.21.67.8.55A11.5 11.5 0 0 0 12 .7Z" />
+    </svg>
   );
 }

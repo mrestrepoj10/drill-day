@@ -58,7 +58,7 @@ export function FloorPlan({
               textAnchor="middle"
               fontSize={r.id.startsWith("RISER") ? 1.1 : 1.5}
               className="fill-muted-foreground"
-              style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              style={{ fontFamily: "var(--font-mono)" }}
             >
               {shortName(r.name)}
             </text>
@@ -70,7 +70,7 @@ export function FloorPlan({
         <polyline
           points={here.map((p) => `${p[0]},${p[2]}`).join(" ")}
           fill="none"
-          stroke="#2f80d8"
+          stroke="var(--interactive)"
           strokeWidth={0.35}
           strokeOpacity={0.8}
         />
@@ -83,15 +83,15 @@ export function FloorPlan({
           cy={m.position[2]}
           r={0.9}
           fill={`#${(SYSTEM_COLOR[m.system] ?? 0x888888).toString(16).padStart(6, "0")}`}
-          stroke="#f0b429"
+          stroke="var(--warning)"
           strokeWidth={0.4}
         />
       ))}
 
       {position && Math.abs(position[1] - 1.7 - level * 4) < 2 && (
         <g>
-          <circle cx={position[0]} cy={position[2]} r={1.1} fill="#2f80d8" />
-          <circle cx={position[0]} cy={position[2]} r={2.2} fill="none" stroke="#2f80d8" strokeWidth={0.3} strokeOpacity={0.5} />
+          <circle cx={position[0]} cy={position[2]} r={1.1} fill="var(--interactive)" />
+          <circle cx={position[0]} cy={position[2]} r={2.2} fill="none" stroke="var(--interactive)" strokeWidth={0.3} strokeOpacity={0.5} />
         </g>
       )}
     </svg>
