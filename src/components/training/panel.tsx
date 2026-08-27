@@ -1,11 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import {
   ArrowRight,
   Bot,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Eye,
   Lightbulb,
   MapPinned,
@@ -23,6 +25,15 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const FLAGSHIP_STAGES = [
@@ -268,6 +279,7 @@ export function TrainingPanel({
 
 function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
   const otherRoles = ROLES.filter((role) => role.id !== "technician");
+  const [rolePickerOpen, setRolePickerOpen] = useState(false);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -324,28 +336,63 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
         </div>
       </section>
 
-      <Collapsible className="border-t border-border">
-        <CollapsibleTrigger className="group flex w-full items-center justify-between px-5 py-4 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground">
-          Explore six more roles
-          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-2 px-5 pb-4">
-          {otherRoles.map((role) => (
+      <div className="mt-auto border-t border-border p-3">
+        <Popover open={rolePickerOpen} onOpenChange={setRolePickerOpen}>
+          <PopoverTrigger asChild>
             <Button
               type="button"
-              key={role.id}
-              variant="outline"
-              onClick={() => onPickRole(role.id)}
-              className="h-auto w-full flex-col items-start gap-1 bg-muted/10 p-3 text-left font-normal"
+              variant="ghost"
+              className="group h-auto w-full justify-between px-2 py-2 text-left font-normal"
             >
-              <span className="text-[13px] font-semibold leading-[1.4]">{role.label}</span>
-              <span className="whitespace-normal text-pretty text-[12px] leading-[1.5] text-muted-foreground">
-                {role.blurb}
+              <span>
+                <span className="block text-[13px] font-semibold leading-[1.4]">Explore scenarios</span>
+                <span className="mt-0.5 block text-[12px] leading-[1.4] text-muted-foreground">
+                  Six specialist roles
+                </span>
               </span>
+              <ChevronRight
+                className="size-4 text-text-tertiary transition-transform group-data-[state=open]:rotate-90"
+                aria-hidden="true"
+              />
             </Button>
-          ))}
-        </CollapsibleContent>
-      </Collapsible>
+          </PopoverTrigger>
+          <PopoverContent
+            side="right"
+            align="end"
+            sideOffset={8}
+            collisionPadding={12}
+            className="w-[min(360px,calc(100vw-1.5rem))] gap-0 p-0"
+          >
+            <Command>
+              <CommandInput placeholder="Search training scenarios…" />
+              <CommandList className="max-h-[min(430px,calc(100dvh-6rem))]">
+                <CommandEmpty>No matching scenario.</CommandEmpty>
+                <CommandGroup heading="Specialist drills">
+                  {otherRoles.map((role) => (
+                    <CommandItem
+                      key={role.id}
+                      value={`${role.label} ${role.blurb}`}
+                      onSelect={() => {
+                        setRolePickerOpen(false);
+                        onPickRole(role.id);
+                      }}
+                      className="items-start gap-3 px-3 py-2.5"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13px] font-semibold leading-[1.4]">{role.label}</span>
+                        <span className="mt-0.5 block whitespace-normal text-pretty text-[12px] leading-[1.45] text-muted-foreground">
+                          {role.blurb}
+                        </span>
+                      </span>
+                      <ArrowRight className="mt-0.5 size-3.5 text-text-tertiary" aria-hidden="true" />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   );
 }

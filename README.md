@@ -18,7 +18,7 @@ The model marks deterministic answers. The agent explains why a near miss was re
 
 ## Why WebMCP matters here
 
-The page exposes 13 native site tools through `document.modelContext`. They operate on the exact scene and session the learner is viewing—no copied state and no separate backend.
+The page exposes 13 native site tools through `navigator.modelContext`. They operate on the exact scene and session the learner is viewing—no copied state and no separate backend.
 
 | Capability | Site tools |
 | --- | --- |

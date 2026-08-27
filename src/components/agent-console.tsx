@@ -11,6 +11,7 @@ import {
   Clipboard,
   ClipboardCheck,
   Footprints,
+  Presentation,
   ShieldAlert,
   Wrench,
   X,
@@ -82,6 +83,7 @@ export function AgentConsole({
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<"activity" | "tools">("activity");
+  const [narrate, setNarrate] = useState(false);
   const mine = useMemo(
     () => tools.filter((tool) => tool.name.startsWith(namespace)),
     [tools, namespace],
@@ -133,10 +135,29 @@ export function AgentConsole({
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold leading-[1.4]">Agent activity</div>
           <div className="mt-0.5 text-[12px] leading-[1.4] text-muted-foreground">
-            {flavor === "native" ? "Native WebMCP" : "WebMCP polyfill"} · {mine.length} tools discoverable
+            {flavor === "native"
+              ? `Native WebMCP · ${mine.length} tools discovered`
+              : `Native WebMCP not detected · in-page console, ${mine.length} tools`}
           </div>
         </div>
         <span className="mt-0.5 text-[12px] font-medium text-success">Live</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant={narrate ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label="Narrate for camera"
+              aria-pressed={narrate}
+              onClick={() => setNarrate((on) => !on)}
+            >
+              <Presentation className="size-3.5" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            Narrate for camera — larger log text, each new event highlighted as it lands
+          </TooltipContent>
+        </Tooltip>
         <Button
           type="button"
           variant="ghost"
@@ -181,6 +202,7 @@ export function AgentConsole({
             events={events}
             drills={drills}
             busy={busy}
+            narrate={narrate}
             onRunDrill={runDrill}
             onClearToolHistory={clear}
           />
@@ -220,16 +242,22 @@ function ActivityFeed({
   events,
   drills,
   busy,
+  narrate,
   onRunDrill,
   onClearToolHistory,
 }: {
   events: TimelineEvent[];
   drills: Drill[];
   busy: string | null;
+  narrate: boolean;
   onRunDrill: (drill: Drill) => Promise<void>;
   onClearToolHistory: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  // In narrate mode the newest event holds a highlight for ~2 s, long enough
+  // for a viewer watching a recording to catch each tool call as it lands.
+  // The animation runs once and self-clears, so no timer state is needed.
+  const lastId = events.length ? events[events.length - 1].id : null;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "nearest" });
@@ -249,7 +277,14 @@ function ActivityFeed({
             </CollapsibleContent>
           </Collapsible>
           <div role="log" aria-live="polite" className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-            {events.map((event) => <TimelineRow key={event.id} event={event} />)}
+            {events.map((event) => (
+              <TimelineRow
+                key={event.id}
+                event={event}
+                narrate={narrate}
+                flash={narrate && event.id === lastId}
+              />
+            ))}
             <div ref={endRef} />
           </div>
         </>
@@ -310,7 +345,15 @@ function ActivityFeed({
   );
 }
 
-function TimelineRow({ event }: { event: TimelineEvent }) {
+function TimelineRow({
+  event,
+  narrate = false,
+  flash = false,
+}: {
+  event: TimelineEvent;
+  narrate?: boolean;
+  flash?: boolean;
+}) {
   const Icon = event.tone === "good"
     ? CheckCircle2
     : event.tone === "bad"
@@ -324,18 +367,24 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
             : CircleDot;
 
   return (
-    <article className={`surface-pop border-b border-border/65 px-4 py-3 ${event.tone === "bad" ? "bg-destructive/5" : ""}`}>
+    <article
+      className={`surface-pop border-b border-border/65 px-4 py-3 ${event.tone === "bad" ? "bg-destructive/5" : ""} ${flash ? "narrate-flash" : ""}`}
+    >
       <div className="flex items-start gap-2.5">
         <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border ${toneClass(event.tone)}`}>
           <Icon className="size-3" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-[12px] font-medium text-muted-foreground">{event.actor}</span>
+            <span className={`${narrate ? "text-[13px]" : "text-[12px]"} font-medium text-muted-foreground`}>{event.actor}</span>
             <time className="ml-auto font-mono text-[11px] tabular-nums text-text-tertiary">{formatTime(event.at)}</time>
           </div>
-          <p className="mt-1 text-pretty text-[13px] font-semibold leading-[1.4]">{event.title}</p>
-          {event.detail ? <p className="mt-1 text-pretty text-[12px] leading-[1.5] text-muted-foreground">{event.detail}</p> : null}
+          <p className={`mt-1 text-pretty ${narrate ? "text-[15px]" : "text-[13px]"} font-semibold leading-[1.4]`}>{event.title}</p>
+          {event.detail ? (
+            <p className={`mt-1 text-pretty ${narrate ? "text-[13px]" : "text-[12px]"} leading-[1.5] text-muted-foreground`}>
+              {event.detail}
+            </p>
+          ) : null}
           {event.call ? (
             <details className="mt-1.5">
               <summary className="cursor-pointer text-[11px] text-text-tertiary transition-colors hover:text-foreground">Technical details</summary>

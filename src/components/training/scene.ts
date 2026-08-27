@@ -1,4 +1,19 @@
-import { Stage, shade, type StageItemInit, type Vec3 } from "@layer0/scene-render"
+import {
+  Stage,
+  aFrameSignParts,
+  ahuTrimParts,
+  defineFacilityAssetGeometry,
+  fcuTrimParts,
+  ladderTrayParts,
+  placeDecorativeAsset,
+  roomPlaqueParts,
+  serverRackParts,
+  shade,
+  switchboardParts,
+  valveTrimParts,
+  type StageItemInit,
+  type Vec3,
+} from "@layer0/scene-render"
 import type { HighlightTone, TrainingElement, TrainingRenderer } from "@layer0/viewer-training"
 import type { FitItem } from "@/lib/training/facility"
 import {
@@ -16,14 +31,14 @@ import {
   walls,
 } from "@/lib/training/facility"
 
-const FABRIC = 0xb3bac3
-const SLAB = 0x767f8b
+const FABRIC = 0x73787b
+const SLAB = 0x686e72
 const GHOST = 0xa7adb6
 const TILE = 0xdfe2e6
-const TBAR = 0x9aa1a9
+const TBAR = 0x7e8589
 const LUMINAIRE = 0xf7f9fb
-const LEAF = 0xc8bda9
-const FRAME_ = 0x8f96a0
+const LEAF = 0x3d4347
+const FRAME_ = 0x262b2e
 const EXIT_SIGN = 0x2f8f5b
 const ROUTE_BLUE = 0x2e718a
 const HAZARD_YELLOW = 0xe4ae32
@@ -68,6 +83,7 @@ export class TrainingScene implements TrainingRenderer {
   build(): void {
     if (this.built) return
     const stage = this.stage
+    defineFacilityAssetGeometry(stage)
 
     for (const slab of slabs()) {
       stage.set(`slab:${slab.id}`, {
@@ -108,6 +124,7 @@ export class TrainingScene implements TrainingRenderer {
     this.setCeiling(false)
 
     for (const element of ELEMENTS) this.paint(element)
+    this.buildTrainingAssetDetails()
     this.built = true
   }
 
@@ -173,6 +190,22 @@ export class TrainingScene implements TrainingRenderer {
   private buildFitout(): void {
     const stage = this.stage
     for (const item of fitout()) {
+      if (item.kind === "rack") {
+        placeDecorativeAsset(stage, {
+          id: `fit:${item.id}`,
+          position: item.position,
+          parts: serverRackParts(item.size),
+        })
+        continue
+      }
+      if (item.kind === "panel") {
+        placeDecorativeAsset(stage, {
+          id: `fit:${item.id}`,
+          position: item.position,
+          parts: switchboardParts(item.size),
+        })
+        continue
+      }
       // A desk is a top on legs, not a block. The difference matters because
       // this is furniture seen from 1.7 m, in the room, at walking speed.
       if (item.kind === "desk" || item.kind === "table") {
@@ -344,14 +377,44 @@ export class TrainingScene implements TrainingRenderer {
 
     // The water tells the story from eye height before any label appears.
     this.stage.set("detail:puddle:214", {
-      geometry: "box",
+      geometry: "sphere",
       position: [20, STOREY + 0.03, 5.35],
-      size: [2.6, 0.025, 1.45],
+      size: [2.6, 0.045, 1.45],
       color: WATER,
       unlit: true,
       opacity: 0.38,
       decorative: true,
     })
+    for (const [suffix, x, z, sx, sz] of [
+      ["north", 19.25, 4.98, 1.1, 0.68],
+      ["east", 21.08, 5.58, 0.92, 0.62],
+      ["south", 19.6, 5.92, 1.25, 0.52],
+    ] as const) {
+      this.stage.set(`detail:puddle:214:${suffix}`, {
+        geometry: "sphere",
+        position: [x, STOREY + 0.035, z],
+        size: [sx, 0.04, sz],
+        color: WATER,
+        unlit: true,
+        opacity: 0.32,
+        decorative: true,
+      })
+    }
+    for (const [suffix, y, x, z, size] of [
+      ["high", STOREY + 2.62, 20.02, 5.78, 0.08],
+      ["mid", STOREY + 1.84, 19.98, 5.71, 0.065],
+      ["low", STOREY + 0.88, 20.03, 5.62, 0.05],
+    ] as const) {
+      this.stage.set(`detail:drip:214:${suffix}`, {
+        geometry: "sphere",
+        position: [x, y, z],
+        size: [size, size * 1.9, size],
+        color: 0x7ec3d7,
+        unlit: true,
+        opacity: 0.72,
+        decorative: true,
+      })
+    }
     this.stage.set("detail:drip-tray:214", {
       geometry: "box",
       position: [20, STOREY + 2.62, 3.4],
@@ -372,6 +435,188 @@ export class TrainingScene implements TrainingRenderer {
         color: 0x79888c,
         opacity: 0.42,
         decorative: true,
+      })
+    }
+
+    // A recognizable, route-safe operational prop from the incident plate.
+    placeDecorativeAsset(this.stage, {
+      id: "detail:room214:wet-floor-sign",
+      position: [22.35, STOREY, 7.2],
+      rotationY: -0.24,
+      parts: aFrameSignParts(),
+    })
+
+    // The open tile reveals a populated plenum, not an empty box over a pipe.
+    placeDecorativeAsset(this.stage, {
+      id: "detail:room214:cable-tray",
+      position: [17.25, STOREY + CEILING + 0.28, 4.05],
+      parts: ladderTrayParts({ length: 3.2, width: 0.72 }),
+    })
+
+    // Physical wayfinding backs up the projected labels. Digits are authored
+    // from exact seven-segment geometry rather than generated image text.
+    for (const [label, x] of [["214", 19.22], ["215", 31.22], ["218", 42.15]] as const) {
+      placeDecorativeAsset(this.stage, {
+        id: `detail:wayfinding:${label}`,
+        position: [x, STOREY + 1.56, 13.96],
+        parts: roomPlaqueParts(label),
+      })
+    }
+
+    // Mortar lines are cheap line geometry and give the north wall the same
+    // painted-blockwork scale cue as the generated Room 214 reference.
+    this.stage.set("detail:room214:blockwork", {
+      geometry: "asset:blockwork",
+      position: [20, STOREY + 1.62, 0.14],
+      size: [9.5, 3.08, 1],
+      color: 0x5f6568,
+      lines: true,
+      decorative: true,
+    })
+
+    // Server room 217 gets a cold-aisle cue and overhead containment, enough
+    // to read as IT space before the learner studies individual equipment.
+    this.stage.set("detail:server217:cold-aisle", {
+      geometry: "box",
+      position: [20, STOREY + 0.022, 24.2],
+      size: [7.4, 0.022, 0.64],
+      color: 0x2e718a,
+      unlit: true,
+      opacity: 0.48,
+      decorative: true,
+    })
+    placeDecorativeAsset(this.stage, {
+      id: "detail:server217:cable-tray",
+      position: [20, STOREY + CEILING + 0.25, 22.25],
+      parts: ladderTrayParts({ length: 7.2, width: 0.55, rungSpacing: 0.48 }),
+    })
+
+    // Switchroom standing clearance is operational information, not surface
+    // decoration; the yellow boundary makes the equipment frontage legible.
+    for (const [suffix, x, z, sx, sz] of [
+      ["front", 7, 23.35, 10.4, 0.06],
+      ["back", 7, 25.1, 10.4, 0.06],
+      ["west", 1.8, 24.22, 0.06, 1.82],
+      ["east", 12.2, 24.22, 0.06, 1.82],
+    ] as const) {
+      this.stage.set(`detail:switchroom:clearance:${suffix}`, {
+        geometry: "box",
+        position: [x, 0.025, z],
+        size: [sx, 0.025, sz],
+        color: HAZARD_YELLOW,
+        unlit: true,
+        decorative: true,
+      })
+    }
+
+    this.buildDockDetails()
+  }
+
+  private buildDockDetails(): void {
+    // Dock bumpers and bollards frame the roller door while staying clear of
+    // the leveller and the walkable centerline.
+    for (const [suffix, z] of [["north", 4.55], ["south", 9.45]] as const) {
+      this.stage.set(`detail:dock:bollard:${suffix}`, {
+        geometry: "cylinder",
+        position: [46.65, 0.55, z],
+        size: [0.22, 1.1, 0.22],
+        color: HAZARD_YELLOW,
+        metal: true,
+        decorative: true,
+      })
+    }
+    for (const [suffix, z] of [["north", 5.05], ["south", 8.95]] as const) {
+      this.stage.set(`detail:dock:bumper:${suffix}`, {
+        geometry: "box",
+        position: [47.68, 0.58, z],
+        size: [0.35, 0.8, 0.4],
+        color: 0x202428,
+        decorative: true,
+      })
+    }
+    placeDecorativeAsset(this.stage, {
+      id: "detail:dock:roller-slats",
+      position: [47.72, 1.6, 7],
+      rotationY: Math.PI / 2,
+      parts: [{
+        key: "slats",
+        geometry: "asset:grille",
+        offset: [0, 0, 0],
+        size: [3.7, 3, 1],
+        color: 0x3c4347,
+        lines: true,
+      }],
+    })
+    for (const offset of [-1.25, -0.75, -0.25, 0.25, 0.75, 1.25]) {
+      this.stage.set(`detail:dock:approach:${offset}`, {
+        geometry: "box",
+        position: [43.15 + offset, 0.025, 10.85],
+        size: [0.22, 0.025, 1.6],
+        color: HAZARD_YELLOW,
+        unlit: true,
+        decorative: true,
+      })
+    }
+  }
+
+  /**
+   * Compound visual trim around answerable elements. The semantic `el:*`
+   * fragment remains untouched; these line-heavy children only improve the
+   * silhouette and stay excluded from training selection.
+   */
+  private buildTrainingAssetDetails(): void {
+    const fcu = ELEMENT_BY_ID.get("CHW-FCU-214")
+    if (fcu) {
+      placeDecorativeAsset(this.stage, {
+        id: "detail:equipment:CHW-FCU-214",
+        position: fcu.position,
+        parts: fcuTrimParts(fcu.size),
+      })
+    }
+
+    for (const id of ["AHU-01", "AHU-02"] as const) {
+      const element = ELEMENT_BY_ID.get(id)
+      if (!element) continue
+      placeDecorativeAsset(this.stage, {
+        id: `detail:equipment:${id}`,
+        position: element.position,
+        parts: ahuTrimParts(element.size),
+      })
+    }
+
+    const crac = ELEMENT_BY_ID.get("CHW-CRAC-217")
+    if (crac) {
+      placeDecorativeAsset(this.stage, {
+        id: "detail:equipment:CHW-CRAC-217",
+        position: crac.position,
+        parts: fcuTrimParts(crac.size),
+      })
+    }
+
+    for (const id of ["DUCT-D12", "VAV-217"] as const) {
+      const element = ELEMENT_BY_ID.get(id)
+      if (!element) continue
+      placeDecorativeAsset(this.stage, {
+        id: `detail:equipment:${id}`,
+        position: element.position,
+        parts: [{
+          key: "seams",
+          geometry: "boxEdges",
+          offset: [0, 0, 0],
+          size: [element.size[0] + 0.025, element.size[1] + 0.025, element.size[2] + 0.025],
+          color: 0x444b50,
+          lines: true,
+        }],
+      })
+    }
+
+    for (const id of ["CHW-VLV-L1", "HTG-VLV-L1", "CHW-VLV-214"] as const) {
+      const element = ELEMENT_BY_ID.get(id)
+      if (!element) continue
+      placeDecorativeAsset(this.stage, {
+        id: `detail:valve:${id}`,
+        position: element.position,
+        parts: valveTrimParts(element.size, SYSTEM_COLOR[element.system] ?? 0x7b858b),
       })
     }
   }

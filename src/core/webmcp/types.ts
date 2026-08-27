@@ -2,7 +2,8 @@
 // https://webmachinelearning.github.io/webmcp/ and the shape ChatGPT Site
 // tools document at https://learn.chatgpt.com/codex/webmcp.
 //
-// The browser owns `document.modelContext`; a page only ever *declares* tools.
+// The browser owns `navigator.modelContext` (older hosts: `document.modelContext`);
+// a page only ever *declares* tools.
 // Everything below is the page-side half of that contract.
 
 /** JSON Schema object describing a tool's arguments. Kept loose on purpose. */
@@ -69,6 +70,9 @@ export interface ModelContext extends EventTarget {
 }
 
 declare global {
+  interface Navigator {
+    modelContext?: ModelContext
+  }
   interface Document {
     modelContext?: ModelContext
   }

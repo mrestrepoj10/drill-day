@@ -1,3 +1,4 @@
+export * from "./assets";
 export * from "./geometry";
 export * from "./ramp";
 export * from "./spec";

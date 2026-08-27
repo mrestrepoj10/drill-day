@@ -363,6 +363,24 @@ a {
   animation: live-dot-pulse 1.6s ease-out infinite;
 }
 
+/* Narrate-for-camera: the newest feed row holds a highlight long enough for a
+   recorded viewer to catch each tool call as it lands. */
+@keyframes narrate-flash {
+  0%,
+  70% {
+    background: color-mix(in srgb, var(--interactive) 14%, var(--background));
+    box-shadow: inset 2px 0 0 0 var(--interactive);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+.narrate-flash {
+  animation: narrate-flash 2s ease-out both;
+}
+
 @media (max-width: 820px) {
   .workspace-navbar-links {
     display: none;
@@ -417,6 +435,11 @@ a {
 
   .workspace-live-dot[data-unseen="true"] {
     animation: none;
+  }
+
+  .narrate-flash {
+    animation: none;
+    box-shadow: inset 2px 0 0 0 var(--interactive);
   }
 }
 

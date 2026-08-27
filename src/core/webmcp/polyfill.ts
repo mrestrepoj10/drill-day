@@ -87,23 +87,33 @@ export type ModelContextFlavor = "native" | "polyfill"
 let flavor: ModelContextFlavor = "native"
 
 /**
- * Returns `document.modelContext`, installing the polyfill first if the
+ * Returns the page's `ModelContext`, installing the polyfill first if the
  * browser has no native implementation. Idempotent.
+ *
+ * The W3C draft (and the ChatGPT desktop browser) put it on
+ * `navigator.modelContext`; earlier hosts used `document.modelContext`. Native
+ * wins wherever it lives; the polyfill is mirrored onto both names so callers
+ * written against either surface find the same object.
  */
 export function ensureModelContext(): ModelContext {
   if (typeof document === "undefined") {
     throw new Error("ensureModelContext is browser-only")
+  }
+  if (typeof navigator.modelContext?.registerTool === "function") {
+    return navigator.modelContext
   }
   if (typeof document.modelContext?.registerTool === "function") {
     return document.modelContext
   }
   flavor = "polyfill"
   const ctx = new PolyfilledModelContext()
-  Object.defineProperty(document, "modelContext", {
-    value: ctx,
-    configurable: true,
-    writable: false,
-  })
+  for (const host of [navigator, document] as const) {
+    Object.defineProperty(host, "modelContext", {
+      value: ctx,
+      configurable: true,
+      writable: false,
+    })
+  }
   return ctx
 }
 

@@ -32,10 +32,20 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
     return t
   }
 
-  /** Every tool passes through the step's allow-list before it runs. */
+  /**
+   * Every tool passes through the step's allow-list before it runs. A refusal
+   * is part of the lesson, so the error the agent reads tells it what to do
+   * *instead* — coach, don't retry.
+   */
   const guard = (name: string): ViewerTraining => {
     const t = need()
-    t.guardTool(name)
+    try {
+      t.guardTool(name)
+    } catch (cause) {
+      const base = cause instanceof Error ? cause.message : String(cause)
+      const instead = REFUSAL_GUIDANCE[name]
+      throw new Error(instead ? `${base} ${instead}` : base)
+    }
     return t
   }
 
@@ -324,7 +334,10 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       execute: async (input: { walkToRoom?: string; overview?: boolean }) => {
         const t = guard("training_set_view")
         if (t.snapshot().status === "running" && t.snapshot().step?.mode === "reach") {
-          throw new Error("view shortcuts are disabled during a navigation objective — the learner must walk it")
+          throw new Error(
+            "view shortcuts are disabled during a navigation objective — the learner must walk it. " +
+              "Do not retry. Use training_say to describe the route, or training_give_hint if they are stuck.",
+          )
         }
         if (input.walkToRoom) {
           const room = ROOMS.find((r) => r.id === input.walkToRoom)
@@ -403,6 +416,28 @@ interface AuthoredMission {
   brief: string
   role?: string
   steps: AuthoredStep[]
+}
+
+/**
+ * What a refused tool's error tells the agent to do instead. Do not retry the
+ * refused call — the refusal is the exercise working as designed.
+ */
+const REFUSAL_GUIDANCE: Record<string, string> = {
+  training_locate_element:
+    "Do not retry. Instead: describe the wayfinding signs the learner should follow, " +
+    "inspect the element with training_inspect_element to coach from its properties, " +
+    "or spend one of the step's hints with training_give_hint.",
+  training_list_elements:
+    "Do not retry. This step tests wayfinding, so browsing is off. Coach from what the " +
+    "learner can see — training_inspect_element and training_trace_system remain available.",
+  training_set_view:
+    "Do not retry. The learner must move themselves on this step. Use training_say to " +
+    "guide them verbally, or training_give_hint if they are stuck.",
+  training_advance:
+    "Do not retry. The learner has not earned this step yet — coach them toward it with " +
+    "training_say or training_give_hint.",
+  training_replay:
+    "Do not retry. Replay is for after a decision is made. Keep coaching the current step.",
 }
 
 const SEARCHLESS = [

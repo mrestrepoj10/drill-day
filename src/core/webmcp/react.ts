@@ -112,10 +112,25 @@ export function useModelContext(): {
     const ctx = ensureModelContext()
     const registered = (await ctx.getTools()).find((t) => t.name === name)
     if (!registered) throw new Error(`no tool named "${name}"`)
-    return asPageCall(() => ctx.executeTool(registered, input))
+    // The draft passes the input as an object; some native hosts want the
+    // JSON-serialized form instead. Fall back when only the shape is rejected.
+    return asPageCall(async () => {
+      try {
+        return await ctx.executeTool(registered, input)
+      } catch (cause) {
+        if (!isInputShapeError(cause)) throw cause
+        return ctx.executeTool(registered, JSON.stringify(input) as unknown as object)
+      }
+    })
   }, [])
 
   return { flavor, tools, calls, run, clear: () => toolJournal.clear() }
+}
+
+/** A host rejecting the *encoding* of the input, as opposed to the tool failing. */
+function isInputShapeError(cause: unknown): boolean {
+  const message = cause instanceof Error ? cause.message : String(cause)
+  return /parse input|not of type/i.test(message)
 }
 
 function subscribeToJournal(onChange: () => void): () => void {

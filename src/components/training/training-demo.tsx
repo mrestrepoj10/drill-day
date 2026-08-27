@@ -11,7 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Stage } from "@layer0/scene-render";
-import { useModelContext, useModelContextTools } from "@layer0/webmcp";
+import { pushAmbientContext, useModelContext, useModelContextTools } from "@layer0/webmcp";
 import { loadTraining, type TrainingSession, type ViewerTraining } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, EYE, LEVELS, ROOMS, STOREY } from "@/lib/training/facility";
 import { MISSIONS, ROLES } from "@/lib/training/missions";
@@ -110,6 +110,19 @@ const DRILLS: Drill[] = [
 type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
 type HoverLabel = { id: string; name: string; system: string; x: number; y: number };
 
+const VIEWER_CHROME_SELECTOR = [
+  ".homeViewWrapper",
+  ".viewcubeWrapper",
+  ".viewcube",
+  ".adsk-toolbar",
+  ".adsk-button",
+  ".adsk-control-group",
+].join(",");
+
+function isViewerChrome(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest(VIEWER_CHROME_SELECTOR);
+}
+
 export function TrainingDemo() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -191,6 +204,29 @@ export function TrainingDemo() {
   useEffect(() => {
     sceneRef.current?.drawTrail(session.trail);
   }, [session.trail]);
+
+  // Learner events flow *to* the agent too, where the host supports ambient
+  // context, so ChatGPT can react to a room entry or a selection unprompted.
+  // On hosts without provideContext this is a silent no-op.
+  const pushedDecisions = useRef(0);
+  useEffect(() => {
+    const fresh = session.decisions.slice(pushedDecisions.current);
+    pushedDecisions.current = session.decisions.length;
+    for (const decision of fresh) {
+      const room = decision.room
+        ? ROOMS.find((item) => item.id === decision.room)?.name ?? decision.room
+        : undefined;
+      const element = decision.element ? ELEMENT_BY_ID.get(decision.element)?.name : undefined;
+      const line = decision.kind === "enter" && room
+        ? `The learner just entered ${room}.`
+        : decision.kind === "arrive" && room
+          ? `The learner reached ${room}.`
+          : decision.kind === "select" && element
+            ? `The learner selected ${element}${decision.verdict ? ` — ${decision.verdict.kind}` : ""}.`
+            : undefined;
+      if (line) pushAmbientContext(`Drill Day update: ${line} Call training_get_session for detail.`);
+    }
+  }, [session.decisions]);
 
   useEffect(() => {
     if (!notice) return;
@@ -311,6 +347,10 @@ export function TrainingDemo() {
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+    if (isViewerChrome(event.target)) {
+      press.current = null;
+      return;
+    }
     if ((event.target as Element).closest("[data-viewer-marker]")) return;
     press.current = {
       pointerId: event.pointerId,
@@ -322,6 +362,10 @@ export function TrainingDemo() {
   };
 
   const onPointerMove = (event: React.PointerEvent) => {
+    if (isViewerChrome(event.target)) {
+      setHover(undefined);
+      return;
+    }
     const start = press.current;
     if (start?.pointerId === event.pointerId) {
       start.maxDistance = Math.max(
@@ -351,6 +395,10 @@ export function TrainingDemo() {
   };
 
   const onPointerUp = (event: React.PointerEvent) => {
+    if (isViewerChrome(event.target)) {
+      press.current = null;
+      return;
+    }
     const start = press.current;
     press.current = null;
     if (!start || start.pointerId !== event.pointerId) return;
@@ -424,6 +472,22 @@ export function TrainingDemo() {
     training?.openCeiling(next);
   };
 
+  const returnToOverview = useCallback(() => {
+    training?.exitWalk();
+    training?.setSection(CUTAWAY_Y);
+    sceneRef.current?.setCeiling(false);
+    setSectionOn(false);
+    void getStage()?.flyTo(OVERVIEW, 520);
+  }, [getStage, training]);
+
+  const onViewerClickCapture = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest(".homeViewWrapper")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    returnToOverview();
+  }, [returnToOverview]);
+
   return (
     <div className="app-shell">
       <header className="workspace-navbar">
@@ -438,23 +502,19 @@ export function TrainingDemo() {
           <Badge variant="outline" className="workspace-product-badge">WebMCP</Badge>
         </div>
 
-        <nav className="workspace-navbar-links" aria-label="Project resources">
+        <nav className="workspace-navbar-links" aria-label="Primary navigation">
           <Button asChild variant="secondary" size="sm" className="workspace-navbar-link">
             <a href="#training-workspace" aria-current="page">Demo</a>
           </Button>
-          <Button asChild variant="ghost" size="sm" className="workspace-navbar-link">
-            <Link href="https://github.com/webmachinelearning/webmcp" target="_blank" rel="noreferrer">
-              WebMCP
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="workspace-navbar-link">
-            <Link
-              href="https://aps.autodesk.com/en/docs/viewer/v7/developers_guide/scene_api/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Scene API
-            </Link>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled
+            title="Creator memo coming soon"
+            className="workspace-navbar-link disabled:opacity-100"
+          >
+            Creator memo
           </Button>
         </nav>
 
@@ -544,6 +604,7 @@ export function TrainingDemo() {
           onPointerUpCapture={onPointerUp}
           onPointerCancelCapture={onPointerCancel}
           onPointerLeave={() => setHover(undefined)}
+          onClickCapture={onViewerClickCapture}
         >
           <div ref={containerRef} className="absolute inset-0" />
           <StageStatus status={status} error={error} />
@@ -567,7 +628,7 @@ export function TrainingDemo() {
           ) : null}
 
           {notice ? (
-            <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-4 z-30 flex justify-center px-4">
+            <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-[4.75rem] z-30 flex justify-center px-4">
               <div className={`surface-pop max-w-lg rounded-md border px-3 py-2 text-center text-[12px] font-medium tone-${notice.tone}`}>
                 {notice.message}
               </div>
@@ -575,15 +636,15 @@ export function TrainingDemo() {
           ) : null}
 
           {!notice && replaying ? (
-            <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center px-4">
+            <div className="pointer-events-none absolute inset-x-0 top-[4.75rem] z-20 flex justify-center px-4">
               <div className="surface-pop rounded-md border border-interactive/30 bg-background/95 px-4 py-2 text-[12px] text-interactive">
                 Replaying the route and every decision in sequence…
               </div>
             </div>
           ) : null}
 
-          {/* Sits above the Autodesk toolbar, which docks bottom-center at ~60px tall. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-[4.5rem] z-20 flex justify-center px-3">
+          {/* Persistent scene context belongs above the model, away from LMV's toolbar. */}
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
             <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-background/90 py-1.5 pl-3 pr-1.5 text-[12px]">
               <span className="leading-[1.4]">
                 <span className="font-semibold">{roleLabel ?? "Choose a scenario"}</span>
@@ -636,7 +697,7 @@ export function TrainingDemo() {
                           L{level}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" sideOffset={8}>
+                      <TooltipContent side="bottom" sideOffset={8}>
                         {locked ? "Level shortcuts are disabled during a navigation objective" : `View level ${level}`}
                       </TooltipContent>
                     </Tooltip>
