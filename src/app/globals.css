@@ -1,0 +1,188 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-cyan: var(--cyan);
+  --color-amber: var(--amber);
+  --color-success: var(--success);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  color-scheme: dark;
+  --background: #0a0e11;
+  --foreground: #f1f5f4;
+  --card: #10161a;
+  --card-foreground: #f1f5f4;
+  --panel: #0d1215;
+  --panel-raised: #141b20;
+  --muted: #192126;
+  --muted-foreground: #98a5aa;
+  --accent: #1d2a30;
+  --accent-foreground: #f3f7f6;
+  --border: #263139;
+  --ring: #7dd3d4;
+  --primary: #a9f0e6;
+  --primary-foreground: #07100f;
+  --destructive: #ff6b66;
+  --cyan: #74d7d3;
+  --amber: #f2bd68;
+  --success: #69d49a;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+select {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+button:not(:disabled),
+a {
+  cursor: pointer;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--cyan) 34%, transparent);
+}
+
+.app-shell {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-rows: 58px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 48% 0%, rgba(82, 168, 166, 0.08), transparent 28rem),
+    var(--background);
+}
+
+.workspace-grid {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(320px, 350px) minmax(560px, 1fr) minmax(330px, 375px);
+}
+
+.glass-panel {
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.eyebrow {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.keycap {
+  display: inline-flex;
+  min-width: 1.65rem;
+  height: 1.55rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #40505a;
+  border-bottom-width: 2px;
+  border-radius: 0.35rem;
+  background: rgba(10, 15, 18, 0.88);
+  color: #dbe4e4;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.viewer-surface .adsk-viewing-viewer {
+  background: #0b1114 !important;
+}
+
+.viewer-surface canvas {
+  outline: none;
+}
+
+.scrollbar-thin {
+  scrollbar-color: #334149 transparent;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 1180px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell {
+    min-height: 100dvh;
+    grid-template-rows: 58px auto;
+  }
+
+  .workspace-grid {
+    grid-template-columns: minmax(310px, 350px) minmax(540px, 1fr);
+  }
+
+  .workspace-activity {
+    grid-column: 1 / -1;
+    min-height: 34rem;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 820px) {
+  .app-shell {
+    display: block;
+  }
+
+  .workspace-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workspace-mission,
+  .workspace-activity {
+    min-height: auto;
+  }
+
+  .workspace-viewer {
+    min-height: 70dvh;
+  }
+}
