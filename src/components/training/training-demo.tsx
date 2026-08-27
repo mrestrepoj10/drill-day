@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import {
+  Activity,
   GitFork,
   MousePointer2,
+  PanelLeft,
 } from "lucide-react";
 import {
   useCallback,
@@ -119,6 +121,8 @@ export function TrainingDemo() {
   const [replaying, setReplaying] = useState(false);
   const [notice, setNotice] = useState<PickNotice>();
   const [hover, setHover] = useState<HoverLabel>();
+  const [missionPaneOpen, setMissionPaneOpen] = useState(false);
+  const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
   const { getStage, status, error } = useStage(containerRef, (stage, handle) => {
     const scene = new TrainingScene(stage);
@@ -162,10 +166,21 @@ export function TrainingDemo() {
     if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
   }, []);
 
+  useEffect(() => {
+    const closeCompactPanes = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMissionPaneOpen(false);
+      setActivityPaneOpen(false);
+    };
+    window.addEventListener("keydown", closeCompactPanes);
+    return () => window.removeEventListener("keydown", closeCompactPanes);
+  }, []);
+
   const pickRole = useCallback(
     (role: string) => {
       setRoleId(role);
       setNotice(undefined);
+      if (role) setMissionPaneOpen(false);
       if (!training) return;
       if (!role) {
         training.clear();
@@ -361,23 +376,53 @@ export function TrainingDemo() {
   return (
     <div className="app-shell">
       <header className="flex items-center gap-5 border-b border-border bg-background px-5">
-        <div>
+        <div className="workspace-brand min-w-0">
           <div className="text-[13px] font-semibold tracking-[-0.01em]">Drill Day</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">AI-guided training in a live building model</div>
+          <div className="workspace-tagline mt-0.5 text-[11px] text-muted-foreground">AI-guided training in a live building model</div>
         </div>
-        <div className="ml-auto hidden items-center gap-4 text-[11px] text-muted-foreground lg:flex">
+        <div className="hidden items-center gap-4 text-[11px] text-muted-foreground lg:flex">
           <HeaderMeta>Autodesk Scene API</HeaderMeta>
           <HeaderMeta>WebMCP · 13 site tools</HeaderMeta>
           <HeaderMeta>Open source · MIT</HeaderMeta>
         </div>
-        <Link
-          href="https://github.com/mrestrepoj10/drill-day"
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
-        >
-          <GitFork className="size-3.5" aria-hidden="true" /> Source
-        </Link>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Mission"
+            aria-controls="mission-panel"
+            aria-expanded={missionPaneOpen}
+            onClick={() => {
+              setMissionPaneOpen((open) => !open);
+              setActivityPaneOpen(false);
+            }}
+            className="workspace-pane-trigger workspace-mission-trigger"
+          >
+            <PanelLeft className="size-3.5" aria-hidden="true" /> <span className="workspace-trigger-label">Mission</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Agent activity"
+            aria-controls="agent-console"
+            aria-expanded={activityPaneOpen}
+            onClick={() => {
+              setActivityPaneOpen((open) => !open);
+              setMissionPaneOpen(false);
+            }}
+            className="workspace-pane-trigger workspace-activity-trigger"
+          >
+            <span className="workspace-live-dot size-1.5 rounded-full bg-success" aria-hidden="true" />
+            <Activity className="size-3.5" aria-hidden="true" /> <span className="workspace-trigger-label">Activity</span>
+          </button>
+          <Link
+            href="https://github.com/mrestrepoj10/drill-day"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="View source on GitHub"
+            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
+          >
+            <GitFork className="size-3.5" aria-hidden="true" /> <span className="workspace-source-label">Source</span>
+          </Link>
+        </div>
       </header>
 
       <main className="workspace-grid">
@@ -388,6 +433,7 @@ export function TrainingDemo() {
           onSection={toggleSection}
           sectionOn={sectionOn}
           replaying={replaying}
+          compactOpen={missionPaneOpen}
           onReplay={async () => {
             if (!training) return;
             setReplaying(true);
@@ -473,24 +519,36 @@ export function TrainingDemo() {
             </div>
           ) : null}
 
-          {replaying ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
+          {!notice && replaying ? (
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
               <div className="rounded-md border border-cyan/30 bg-background/95 px-4 py-2 text-[11px] text-cyan">
                 Replaying the route and every decision in sequence…
               </div>
             </div>
-          ) : session.status === "running" ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-4">
-              <div className="flex flex-wrap items-center justify-center gap-3 rounded-md border border-border bg-background/90 px-3 py-2 text-[11px] text-muted-foreground">
+          ) : !notice && session.status === "running" ? (
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+              <div
+                aria-label="Viewer controls"
+                className="flex max-w-full flex-wrap items-center justify-center gap-3 rounded-md border border-border bg-background/90 px-3 py-2 text-[11px] text-muted-foreground"
+              >
                 <span className="flex items-center gap-1"><span className="keycap">W</span><span className="keycap">A</span><span className="keycap">S</span><span className="keycap">D</span> walk</span>
                 <span>Drag to look</span>
-                <span className="flex items-center gap-1"><MousePointer2 className="size-3" aria-hidden="true" /> click a component to answer</span>
+                {session.step?.mode === "reach" ? (
+                  <span>Reach the target room</span>
+                ) : (
+                  <span className="flex items-center gap-1"><MousePointer2 className="size-3" aria-hidden="true" /> click a component to answer</span>
+                )}
               </div>
             </div>
           ) : null}
         </section>
 
-        <AgentConsole namespace="training_" drills={DRILLS} session={session} />
+        <AgentConsole
+          namespace="training_"
+          drills={DRILLS}
+          session={session}
+          compactOpen={activityPaneOpen}
+        />
       </main>
     </div>
   );

@@ -31,6 +31,7 @@ export function TrainingPanel({
   sectionOn,
   onReplay,
   replaying,
+  compactOpen,
 }: {
   session: TrainingSession;
   onPickRole: (role: string) => void;
@@ -39,6 +40,7 @@ export function TrainingPanel({
   sectionOn: boolean;
   onReplay: () => void;
   replaying: boolean;
+  compactOpen: boolean;
 }) {
   const step = session.step;
   const mission = session.mission;
@@ -55,7 +57,11 @@ export function TrainingPanel({
         })) ?? [];
 
   return (
-    <aside className="workspace-mission glass-panel scrollbar-thin flex h-full min-h-0 flex-col overflow-y-auto border-r border-border">
+    <aside
+      id="mission-panel"
+      data-compact-open={compactOpen}
+      className="workspace-mission glass-panel scrollbar-thin flex h-full min-h-0 flex-col overflow-y-auto border-r border-border"
+    >
       {!mission ? (
         <MissionLaunch onPickRole={onPickRole} />
       ) : (

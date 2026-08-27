@@ -101,10 +101,37 @@ a {
   display: grid;
   min-height: 0;
   grid-template-columns: minmax(320px, 350px) minmax(560px, 1fr) minmax(330px, 375px);
+  overflow: hidden;
+  position: relative;
 }
 
 .glass-panel {
   background: var(--panel);
+}
+
+.workspace-pane-trigger {
+  display: none;
+  height: 2rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--panel-raised);
+  padding: 0 0.65rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 550;
+  transition: background-color 140ms ease, color 140ms ease, transform 100ms ease-out;
+}
+
+.workspace-pane-trigger:hover,
+.workspace-pane-trigger[aria-expanded="true"] {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.workspace-pane-trigger:active {
+  transform: scale(0.97);
 }
 
 .eyebrow {
@@ -145,42 +172,118 @@ a {
 }
 
 @media (max-width: 1180px) {
-  body {
-    overflow: auto;
-  }
-
-  .app-shell {
-    min-height: 100dvh;
-    grid-template-rows: 58px auto;
-  }
-
   .workspace-grid {
-    grid-template-columns: minmax(310px, 350px) minmax(540px, 1fr);
+    grid-template-columns: minmax(310px, 350px) minmax(0, 1fr);
+  }
+
+  .workspace-activity-trigger {
+    display: inline-flex;
   }
 
   .workspace-activity {
-    grid-column: 1 / -1;
-    min-height: 34rem;
-    border-top: 1px solid var(--border);
+    position: fixed;
+    z-index: 50;
+    top: 58px;
+    right: 0;
+    bottom: 0;
+    width: min(375px, calc(100vw - 1rem));
+    height: auto;
+    border-left: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    box-shadow: -24px 0 56px rgba(0, 0, 0, 0.32);
+    backdrop-filter: blur(20px) saturate(120%);
+    transform: translate3d(100%, 0, 0);
+    visibility: hidden;
+    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 260ms;
+    will-change: transform;
+  }
+
+  .workspace-activity[data-compact-open="true"] {
+    transform: translate3d(0, 0, 0);
+    visibility: visible;
+    transition-delay: 0s;
   }
 }
 
 @media (max-width: 820px) {
-  .app-shell {
-    display: block;
-  }
-
   .workspace-grid {
-    display: flex;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
-  .workspace-mission,
-  .workspace-activity {
-    min-height: auto;
+  .workspace-mission-trigger {
+    display: inline-flex;
   }
 
   .workspace-viewer {
-    min-height: 70dvh;
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  .workspace-mission {
+    position: fixed;
+    z-index: 50;
+    top: 58px;
+    bottom: 0;
+    left: 0;
+    width: min(350px, calc(100vw - 1rem));
+    height: auto;
+    border-right: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    box-shadow: 24px 0 56px rgba(0, 0, 0, 0.32);
+    backdrop-filter: blur(20px) saturate(120%);
+    transform: translate3d(-100%, 0, 0);
+    visibility: hidden;
+    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 260ms;
+    will-change: transform;
+  }
+
+  .workspace-mission[data-compact-open="true"] {
+    transform: translate3d(0, 0, 0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell > header {
+    gap: 0.5rem;
+    padding-inline: 0.75rem;
+  }
+
+  .workspace-tagline,
+  .workspace-trigger-label,
+  .workspace-source-label,
+  .workspace-live-dot {
+    display: none;
+  }
+
+  .workspace-pane-trigger {
+    width: 2rem;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-shell > header a {
+    width: 2rem;
+    justify-content: center;
+    padding-inline: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-mission,
+  .workspace-activity,
+  .workspace-pane-trigger {
+    transition-duration: 1ms;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .workspace-mission,
+  .workspace-activity {
+    background: var(--panel);
+    backdrop-filter: none;
   }
 }

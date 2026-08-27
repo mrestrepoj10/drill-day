@@ -41,10 +41,12 @@ export function AgentConsole({
   drills = [],
   namespace,
   session,
+  compactOpen,
 }: {
   drills?: Drill[];
   namespace: string;
   session: TrainingSession;
+  compactOpen: boolean;
 }) {
   const { flavor, tools, calls, run, clear } = useModelContext();
   const [open, setOpen] = useState<string | null>(null);
@@ -81,7 +83,11 @@ export function AgentConsole({
   };
 
   return (
-    <aside className="workspace-activity glass-panel flex h-full min-h-0 flex-col border-l border-border">
+    <aside
+      id="agent-console"
+      data-compact-open={compactOpen}
+      className="workspace-activity glass-panel flex h-full min-h-0 flex-col border-l border-border"
+    >
       <header className="border-b border-border px-4 py-3.5">
         <div className="flex items-center gap-2">
           <span className={`size-2 rounded-full ${flavor === "native" ? "bg-success" : "bg-amber"}`} />
