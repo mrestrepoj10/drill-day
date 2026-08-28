@@ -417,6 +417,20 @@ a {
   animation: narrate-flash 2s ease-out both;
 }
 
+@media (max-width: 1499.98px) {
+  .workspace-navbar[data-mission-pane-open="true"] .workspace-brand-context,
+  .workspace-navbar[data-mission-pane-open="true"] .workspace-context-separator {
+    display: none;
+  }
+}
+
+@media (min-width: 1500px) {
+  .workspace-brand-context,
+  .workspace-context-separator {
+    display: none;
+  }
+}
+
 @media (max-width: 820px) {
   .workspace-mission {
     width: min(326px, calc(100vw - 1rem));

@@ -21,7 +21,10 @@ export function WorkspaceHeader({
   onToggleActivity,
 }: WorkspaceHeaderProps) {
   return (
-    <header className="workspace-navbar">
+    <header
+      className="workspace-navbar"
+      data-mission-pane-open={missionPaneOpen}
+    >
       <div className="workspace-navbar-start">
         <Tooltip>
           <TooltipTrigger asChild>
