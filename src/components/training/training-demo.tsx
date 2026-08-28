@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { Activity, Box, MousePointer2, PanelLeft } from "lucide-react";
+import { MousePointer2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -26,6 +25,7 @@ import { TrainingPanel } from "@/components/training/panel";
 import { AgentConsole, type Drill } from "@/components/agent-console";
 import { StageStatus, useStage } from "@/components/use-stage";
 import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
+import { WorkspaceHeader } from "@/components/training/workspace-header";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -495,79 +495,17 @@ export function TrainingDemo() {
 
   return (
     <div className="app-shell">
-      <header className="workspace-navbar">
-        <div className="workspace-navbar-start">
-          <Link href="/" className="workspace-brand" aria-label="Drill Day home">
-            <span className="workspace-brand-mark" aria-hidden="true">
-              <Box className="size-3.5" strokeWidth={1.8} />
-            </span>
-            <span>Drill Day</span>
-          </Link>
-          <span className="workspace-brand-context">
-            <span aria-hidden="true">·</span>
-            WebMCP challenge
-          </span>
-        </div>
-
-        <div className="workspace-navbar-actions">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label="Mission"
-            aria-controls="mission-panel"
-            aria-expanded={missionPaneOpen}
-            onClick={() => {
-              setMissionPaneOpen((open) => !open);
-              setActivityPaneOpen(false);
-            }}
-            className="workspace-utility-action hidden max-[1499px]:inline-flex"
-          >
-            <PanelLeft className="size-3.5" aria-hidden="true" />
-            <span className="workspace-trigger-label">Mission</span>
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            aria-label={unseen ? `Agent activity, ${unseen} new events` : "Agent activity"}
-            aria-controls="agent-console"
-            aria-expanded={activityPaneOpen}
-            onClick={toggleActivityPane}
-          >
-            <span
-              className="workspace-live-dot size-1.5 rounded-full bg-success"
-              data-unseen={unseen > 0}
-              aria-hidden="true"
-            />
-            <Activity className="size-3.5" aria-hidden="true" />
-            <span className="workspace-trigger-label">Activity</span>
-            {unseen > 0 ? (
-              <span
-                key={unseen}
-                className="workspace-activity-count rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-4 text-background"
-              >
-                {unseen}
-              </span>
-            ) : null}
-          </Button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button asChild variant="ghost" size="icon-sm" className="workspace-source-action">
-                <Link
-                  href="https://github.com/mrestrepoj10/drill-day"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="View source on GitHub"
-                >
-                  <GitHubMark />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>View source on GitHub</TooltipContent>
-          </Tooltip>
-        </div>
-      </header>
+      <WorkspaceHeader
+        context={session.mission?.title ?? "WebMCP challenge"}
+        missionPaneOpen={missionPaneOpen}
+        activityPaneOpen={activityPaneOpen}
+        unseenActivity={unseen}
+        onToggleMission={() => {
+          setMissionPaneOpen((open) => !open);
+          setActivityPaneOpen(false);
+        }}
+        onToggleActivity={toggleActivityPane}
+      />
 
       <main id="training-workspace" className="workspace-grid">
         <TrainingPanel
@@ -714,13 +652,5 @@ export function TrainingDemo() {
         />
       </main>
     </div>
-  );
-}
-
-function GitHubMark() {
-  return (
-    <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 .7a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.28-1.7-1.28-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18A11 11 0 0 1 12 6.11c.98 0 1.95.13 2.87.39 2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.71 5.39-5.29 5.68.42.36.79 1.06.79 2.14v3.27c0 .31.21.67.8.55A11.5 11.5 0 0 0 12 .7Z" />
-    </svg>
   );
 }
