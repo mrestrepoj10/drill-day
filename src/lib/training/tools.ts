@@ -90,6 +90,7 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
             ? {
                 id: step.id,
                 prompt: step.prompt,
+                guidance: step.guidance,
                 mode: step.mode,
                 attempts: s.attempts,
                 hintsUsed: s.hintsUsed,
@@ -102,6 +103,9 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
             room: s.room ? ROOMS.find((r) => r.id === s.room)?.name ?? s.room : "outside",
             level: s.level,
             metresWalked: Math.round(pathLength(s.trail)),
+            selectedElement: s.selection
+              ? t.element(s.selection.element)?.name ?? s.selection.element
+              : null,
           },
           recentDecisions: s.decisions.slice(-6).map((d) => ({
             step: d.stepId,
@@ -227,6 +231,7 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
               additionalProperties: false,
               properties: {
                 prompt: { type: "string", minLength: 5, maxLength: 320 },
+                guidance: { type: "string", minLength: 5, maxLength: 320 },
                 mode: { type: "string", enum: ["select", "reach"] },
                 selectIds: { type: "array", maxItems: 12, items: { type: "string", maxLength: 80 } },
                 nearMisses: {
@@ -384,8 +389,8 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       name: "training_replay",
       title: "Replay the session",
       description:
-        "Flies back through every decision the learner made, in order, with the route they walked drawn " +
-        "underneath. Best used at the end, or when the same mistake has happened twice.",
+        "Flies back through every decision the learner made, in order. The walked route stays visible " +
+        "on the floor plan. Best used at the end, or when the same mistake has happened twice.",
       inputSchema: schema({}),
       execute: async () => {
         guard("training_replay")
@@ -400,6 +405,7 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
 
 interface AuthoredStep {
   prompt: string
+  guidance?: string
   mode: "select" | "reach"
   selectIds?: string[]
   nearMisses?: { id: string; diagnosis: string }[]
@@ -475,6 +481,7 @@ function compile(input: AuthoredMission, t: ViewerTraining): Mission {
     return {
       id: `a${i + 1}`,
       prompt: step.prompt,
+      guidance: step.guidance,
       mode: step.mode,
       startState: start
         ? {

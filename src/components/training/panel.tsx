@@ -138,8 +138,19 @@ export function TrainingPanel({
                   Step {session.stepIndex + 1} — {step.mode === "reach" ? "Navigate" : "Select component"}
                 </h2>
                 <p className="mt-2 text-pretty text-[15px] font-medium leading-[1.5] tracking-[-0.01em]">
-                  {clearerPrompt(mission.id, session.stepIndex, step.prompt)}
+                  {step.prompt}
                 </p>
+                {step.guidance ? (
+                  <div className="mt-3 flex gap-2.5 rounded-lg border border-interactive/25 bg-interactive/8 p-3">
+                    <MapPinned className="mt-0.5 size-4 shrink-0 text-interactive" aria-hidden="true" />
+                    <div>
+                      <p className="text-[13px] font-semibold leading-[1.4] text-interactive">Next move</p>
+                      <p className="mt-1 text-pretty text-[12px] leading-[1.5] text-muted-foreground">
+                        {step.guidance}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
                 {step.allowedTools ? (
                   <div className="mt-3 flex gap-2.5 rounded-lg border border-warning/30 bg-warning/8 p-3">
                     <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
@@ -212,7 +223,7 @@ export function TrainingPanel({
             </div>
           </section>
 
-          <Collapsible className="border-b border-border">
+          <Collapsible defaultOpen className="border-b border-border">
             <CollapsibleTrigger className="group flex w-full items-center justify-between px-5 py-3.5 text-left transition-colors hover:bg-surface-hover">
               <span>
                 <span className="block text-[13px] font-semibold leading-[1.4]">Live floor plan</span>
@@ -427,15 +438,6 @@ function MissionControl({
       <span className="whitespace-normal text-[12px] font-semibold leading-[1.3]">{label}</span>
     </Button>
   );
-}
-
-function clearerPrompt(missionId: string, stepIndex: number, fallback: string): string {
-  if (missionId !== "m-technician") return fallback;
-  return [
-    "Find Room 214 on Level 1. Follow the corridor west and read the building signs.",
-    "Look above the missing ceiling tile. Hover to identify components, then select the source of the leak.",
-    "Trace the pipe upstream. Select the nearest chilled-water valve that stops this leak without shutting down the whole building.",
-  ][stepIndex] ?? fallback;
 }
 
 function summarise(session: TrainingSession): string {

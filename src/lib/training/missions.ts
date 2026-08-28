@@ -58,7 +58,7 @@ export const MISSIONS: Record<string, Mission> = {
       {
         id: "t1",
         mode: "reach",
-        prompt: "Find Room 214 on foot. Search is switched off — read the building.",
+        prompt: "Find Room 214 on Level 1. Follow the corridor west and read the building signs.",
         startState: { walkTo: [44, L1, 16], facing: [20, L1, 16] },
         validDestination: { room: "ROOM-214" },
         allowedTools: NO_SEARCH,
@@ -71,7 +71,7 @@ export const MISSIONS: Record<string, Mission> = {
       {
         id: "t2",
         mode: "select",
-        prompt: "Select the part that is actually leaking.",
+        prompt: "Look above the missing ceiling tile. Hover to identify components, then select the source of the leak.",
         startState: { walkTo: [20, L1, 10], facing: [20, L1, 3] },
         validSelections: ["CHW-DROP-214"],
         nearMisses: [
@@ -98,7 +98,9 @@ export const MISSIONS: Record<string, Mission> = {
         id: "t3",
         mode: "select",
         prompt:
-          "Now stop it. Find the nearest valve that actually takes water off that split. Search stays off.",
+          "Trace the pipe upstream. Select the nearest chilled-water valve that stops this leak without shutting down the whole building.",
+        guidance:
+          "The valve is not in Room 214. Leave the room and cross the corridor to the Level 1 riser cupboard, then hover over the paired valves in 3D to distinguish chilled water from heating.",
         validSelections: ["CHW-VLV-L1"],
         nearMisses: [
           {

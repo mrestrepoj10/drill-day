@@ -531,6 +531,24 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
   if (decision.kind === "hint") {
     return { id: `decision-${decision.at}-${index}`, at: decision.at, actor: "Learner", title: "Requested a hint", tone: "near" };
   }
+  if (decision.kind === "deselect") {
+    return {
+      id: `decision-${decision.at}-${index}`,
+      at: decision.at,
+      actor: "Learner",
+      title: `Cleared ${element?.name ?? decision.element ?? "the current selection"}`,
+      tone: "neutral",
+    };
+  }
+  if (decision.kind === "inspect") {
+    return {
+      id: `decision-${decision.at}-${index}`,
+      at: decision.at,
+      actor: "Learner",
+      title: `Inspected ${element?.name ?? decision.element ?? "a component"}`,
+      tone: "neutral",
+    };
+  }
   const verdict = decision.verdict;
   return {
     id: `decision-${decision.at}-${index}`,

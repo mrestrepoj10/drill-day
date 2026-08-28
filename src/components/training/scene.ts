@@ -40,7 +40,6 @@ const LUMINAIRE = 0xf7f9fb
 const LEAF = 0x3d4347
 const FRAME_ = 0x262b2e
 const EXIT_SIGN = 0x2f8f5b
-const ROUTE_BLUE = 0x2e718a
 const HAZARD_YELLOW = 0xe4ae32
 const WATER = 0x4d9ab5
 const FURNITURE: Record<string, number> = {
@@ -71,6 +70,7 @@ const TONE_COLOR: Record<HighlightTone, number> = {
  */
 export class TrainingScene implements TrainingRenderer {
   private highlighted = new Map<string, HighlightTone>()
+  private selection: { id: string; tone: HighlightTone } | null = null
   private isolated: Set<string> | null = null
   private ceiling: string[] = []
   private ceilingSize = new Map<string, Vec3>()
@@ -347,22 +347,13 @@ export class TrainingScene implements TrainingRenderer {
 
   /**
    * Small operational cues taken from the generated incident briefing image:
-   * a route stripe, threshold markings, a wet floor and an FCU drip tray. They
-   * are context, never answerable catalogue objects, so stable training ids
-   * remain separate from the visual dressing.
+   * threshold markings, a wet floor and an FCU drip tray. They are context,
+   * never answerable catalogue objects, so stable training ids remain separate
+   * from the visual dressing.
    */
   private buildEnvironmentalDetails(): void {
     for (const level of [0, 1]) {
       const floor = level * STOREY
-      this.stage.set(`detail:route:${level}`, {
-        geometry: "box",
-        position: [24, floor + 0.025, 16],
-        size: [44, 0.025, 0.12],
-        color: ROUTE_BLUE,
-        unlit: true,
-        opacity: 0.88,
-        decorative: true,
-      })
       for (const offset of [-0.42, -0.14, 0.14, 0.42]) {
         this.stage.set(`detail:hazard:${level}:${offset}`, {
           geometry: "box",
@@ -632,7 +623,9 @@ export class TrainingScene implements TrainingRenderer {
   }
 
   private itemFor(element: TrainingElement): StageItemInit {
-    const tone = this.highlighted.get(element.id)
+    const tone = this.selection?.id === element.id
+      ? this.selection.tone
+      : this.highlighted.get(element.id)
     const base = SYSTEM_COLOR[element.system] ?? 0x8b939d
     const ghosted = this.isolated && !this.isolated.has(element.id)
     // A highlighted element takes the tone colour itself. Nothing is drawn in
@@ -719,11 +712,13 @@ export class TrainingScene implements TrainingRenderer {
   }
 
   clearHighlights(): void {
-    const previous = [...this.highlighted.keys()]
     this.highlighted.clear()
     this.syncHighlights()
-    for (const id of previous) this.repaint(id)
-    this.stage.refresh()
+  }
+
+  setSelection(selection: { id: string; tone: HighlightTone } | null): void {
+    this.selection = selection
+    this.syncHighlights()
   }
 
   /** Emphasise a set and ghost everything else. Null restores the full model. */
@@ -778,7 +773,9 @@ export class TrainingScene implements TrainingRenderer {
   private syncHighlights(): void {
     const stage = this.stage
     const wanted = new Set<string>()
-    for (const [id, tone] of this.highlighted) {
+    const visible = new Map(this.highlighted)
+    if (this.selection) visible.set(this.selection.id, this.selection.tone)
+    for (const [id, tone] of visible) {
       const element = ELEMENT_BY_ID.get(id)
       if (!element) continue
       this.repaint(id)
@@ -806,40 +803,6 @@ export class TrainingScene implements TrainingRenderer {
     stage.refresh()
   }
 
-  // --- replay ---------------------------------------------------------------
-
-  /** Draws the walked path as a line on the floor of each level. */
-  drawTrail(trail: Vec3[]): void {
-    this.stage.removeWhere("trail:")
-    if (trail.length < 2) return
-    const positions: number[] = []
-    for (let i = 1; i < trail.length; i++) {
-      const a = trail[i - 1]
-      const b = trail[i]
-      // Skip the jump when a step teleports the learner to a new start point.
-      if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) > 6) continue
-      positions.push(a[0], a[1] - 1.55, a[2], b[0], b[1] - 1.55, b[2])
-    }
-    if (!positions.length) return
-    this.stage.defineGeometry("trail", {
-      positions: new Float32Array(positions),
-      normals: new Float32Array(0),
-      indices: new Uint16Array(0),
-    })
-    this.stage.set("trail:path", {
-      geometry: "trail",
-      position: [0, 0, 0],
-      color: 0x2f80d8,
-      lines: true,
-      decorative: true,
-    })
-    this.stage.refresh()
-  }
-
-  clearTrail(): void {
-    this.stage.removeWhere("trail:")
-    this.stage.refresh()
-  }
 }
 
 /**

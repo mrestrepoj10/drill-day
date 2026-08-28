@@ -16,10 +16,10 @@ import type {
   Mission,
   TrainingElement,
   TrainingRoom,
+  SelectionResult,
   TrainingSession,
   TrainingStep,
   Vec3,
-  Verdict,
   ViewerState,
 } from "./schema"
 
@@ -33,6 +33,8 @@ export const TRAINING_EXTENSION_ID = "Layer0.ViewerTraining"
 export interface TrainingRenderer {
   highlight(groups: { ids: ElementRef[]; tone: HighlightTone }[]): void
   clearHighlights(): void
+  /** Selection is singular; hint and agent highlights remain independently additive. */
+  setSelection(selection: { id: ElementRef; tone: HighlightTone } | null): void
   isolate(ids: ElementRef[] | null): void
   boundsOf(id: ElementRef): { position: Vec3; size: Vec3 } | undefined
   /**
@@ -61,7 +63,7 @@ export interface ViewerTraining {
   restart(): void
   clear(): void
 
-  submitSelection(id: ElementRef): Verdict
+  toggleSelection(id: ElementRef): SelectionResult
   nextHint(): Hint | undefined
   advance(reason?: string): void
   coach(text: string, from?: "app" | "agent"): void
@@ -185,6 +187,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
     clear(): void {
       this.exitWalk()
       this.renderer?.clearHighlights()
+      this.renderer?.setSelection(null)
       this.renderer?.isolate(null)
       this.setSection(null)
       this.session = { ...EMPTY, version: this.session.version + 1 }
@@ -194,6 +197,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
     private async openStep(step: TrainingStep | undefined): Promise<void> {
       if (!step) return
       this.renderer?.clearHighlights()
+      this.renderer?.setSelection(null)
       if (step.startState) await this.applyViewerState(step.startState)
     }
 
@@ -211,6 +215,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       }
       const nextIndex = s.stepIndex + 1
       const next = s.mission.steps[nextIndex]
+      if (next) this.renderer?.setSelection(null)
       this.session = {
         ...s,
         stepIndex: nextIndex,
@@ -219,6 +224,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
         attempts: 0,
         hintsUsed: 0,
         revealed: [],
+        selection: next ? undefined : s.selection,
       }
       this.stepOpenedAt = Date.now()
       if (reason) this.coach(reason, "app")
@@ -230,30 +236,55 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
 
     // --- marking ----------------------------------------------------------
 
-    submitSelection(id: ElementRef): Verdict {
+    toggleSelection(id: ElementRef): SelectionResult {
+      if (this.session.selection?.element === id) {
+        this.renderer?.setSelection(null)
+        this.session = { ...this.session, selection: undefined }
+        this.record({ kind: "deselect", element: id })
+        this.emit()
+        return { action: "cleared", message: "Selection cleared." }
+      }
+
       const step = this.session.step
-      if (!step) return { kind: "wrong", message: "No step is open." }
-      if (step.mode !== "select") {
+      if (this.session.status === "running" && step?.mode !== "select") {
         return {
-          kind: "blocked",
+          action: "blocked",
           message: "This step is asking you to get somewhere, not to pick something.",
         }
       }
+
+      if (!step || this.session.status !== "running") {
+        const element = this.byId.get(id)
+        this.session = { ...this.session, selection: { element: id } }
+        this.renderer?.setSelection({ id, tone: "trace" })
+        this.record({ kind: "inspect", element: id })
+        this.emit()
+        return {
+          action: "selected",
+          message: element ? `${element.name} · ${element.system}` : id,
+        }
+      }
+
       const verdict = markSelection(step, id, this.byId)
-      this.session = { ...this.session, attempts: this.session.attempts + 1 }
+      this.session = {
+        ...this.session,
+        attempts: this.session.attempts + 1,
+        selection: { element: id, verdict },
+      }
       const progress = this.session.progress[this.session.stepIndex]
       if (progress) progress.attempts++
       this.record({ kind: "select", element: id, verdict })
 
-      this.renderer?.highlight([
-        { ids: [id], tone: verdict.kind === "correct" ? "good" : verdict.kind === "near" ? "near" : "bad" },
-      ])
+      this.renderer?.setSelection({
+        id,
+        tone: verdict.kind === "correct" ? "good" : verdict.kind === "near" ? "near" : "bad",
+      })
       if (verdict.kind === "correct") {
         if (step.successState) void this.applyViewerState(step.successState)
         this.advance()
       }
       this.emit()
-      return verdict
+      return { action: "selected", message: verdict.message, verdict }
     }
 
     /** Called from the camera listener as the learner walks. */
@@ -505,8 +536,8 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
 
     /**
      * Flies the session back through itself: every pick and every arrival, in
-     * order, with the walked trail underneath. The learner watches their own
-     * reasoning rather than reading a score.
+     * order. The learner watches their own reasoning rather than reading a
+     * score; the walked route remains available in the floor plan.
      */
     async replay(onFrame?: (index: number) => void): Promise<void> {
       const marks = this.session.decisions.filter((d) => d.verdict && d.kind !== "hint")
@@ -534,16 +565,27 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
           this.viewer.refresh(true)
         }
         if (d.element) {
-          this.renderer?.highlight([
-            {
-              ids: [d.element],
-              tone: d.verdict!.kind === "correct" ? "good" : d.verdict!.kind === "near" ? "near" : "bad",
-            },
-          ])
+          this.renderer?.setSelection({
+            id: d.element,
+            tone: d.verdict!.kind === "correct" ? "good" : d.verdict!.kind === "near" ? "near" : "bad",
+          })
         }
         await wait(1400)
       }
       this.setSection(null)
+      const selected = this.session.selection
+      this.renderer?.setSelection(selected
+        ? {
+            id: selected.element,
+            tone: selected.verdict?.kind === "correct"
+              ? "good"
+              : selected.verdict?.kind === "near"
+                ? "near"
+                : selected.verdict
+                  ? "bad"
+                  : "trace",
+          }
+        : null)
       onFrame?.(-1)
     }
 
