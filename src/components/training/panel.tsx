@@ -5,19 +5,22 @@ import { useState } from "react";
 import {
   ArrowRight,
   Bot,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Eye,
   Lightbulb,
   MapPinned,
   RotateCcw,
-  ShieldAlert,
   Timer,
 } from "lucide-react";
 import type { TrainingSession } from "@layer0/viewer-training";
 import { ROOMS } from "@/lib/training/facility";
 import { ROLES } from "@/lib/training/missions";
+import { MissionDebrief } from "@/components/training/mission-debrief";
+import {
+  MissionProgress,
+  type MissionStageView,
+} from "@/components/training/mission-progress";
 import { FloorPlan } from "@/components/training/plan";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,17 +66,17 @@ export function TrainingPanel({
 }) {
   const step = session.step;
   const mission = session.mission;
-  const lastVerdict = session.decisions.findLast(
-    (decision) => decision.verdict && decision.kind !== "hint",
-  );
+  const latestCoach = session.coaching.at(-1);
   const highlighted = session.revealed.flatMap((hint) => hint.reveals ?? []);
-  const stages =
-    mission?.id === "m-technician"
-      ? FLAGSHIP_STAGES
-      : mission?.steps.map((item) => ({
-          label: item.mode === "reach" ? "Navigate" : "Select",
-          detail: item.prompt,
-        })) ?? [];
+  const stages: MissionStageView[] = mission?.steps.map((item, index) => ({
+    id: item.id,
+    label: mission.id === "m-technician"
+      ? FLAGSHIP_STAGES[index]?.label ?? `Stage ${index + 1}`
+      : item.mode === "reach"
+        ? "Navigate"
+        : "Select",
+    prompt: item.prompt,
+  })) ?? [];
 
   return (
     <aside
@@ -98,136 +101,29 @@ export function TrainingPanel({
                 {mission.author === "agent" ? "Agent-authored" : "Built-in scenario"}
               </span>
             </div>
-
-            <ol className="mt-3 flex items-center gap-1.5" aria-label="Mission progress">
-              {stages.map((stage, index) => {
-                const cleared = session.progress[index]?.cleared;
-                const current = index === session.stepIndex && session.status === "running";
-                return (
-                  <li key={`${stage.label}-${index}`} className="flex min-w-0 items-center gap-1.5">
-                    {index > 0 ? <span className="h-px w-3 shrink-0 bg-border" aria-hidden="true" /> : null}
-                    <span
-                      aria-hidden="true"
-                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-semibold ${
-                        cleared
-                          ? "border-success/40 bg-success/15 text-success"
-                          : current
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-border bg-muted/40 text-muted-foreground"
-                      }`}
-                    >
-                      {cleared ? "✓" : index + 1}
-                    </span>
-                    <span
-                      className={`truncate text-[11px] font-semibold ${current ? "text-foreground" : "text-muted-foreground"}`}
-                    >
-                      {stage.label}
-                      {current ? <span className="sr-only">, current step</span> : null}
-                      {cleared ? <span className="sr-only">, cleared</span> : null}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
           </header>
 
-          <section className="border-b border-border px-5 py-4">
-            {step ? (
-              <>
-                <h2 className="text-[13px] font-semibold leading-[1.4]">
-                  Step {session.stepIndex + 1} — {step.mode === "reach" ? "Navigate" : "Select component"}
-                </h2>
-                <p className="mt-2 text-pretty text-[15px] font-medium leading-[1.5] tracking-[-0.01em]">
-                  {step.prompt}
-                </p>
-                {step.guidance ? (
-                  <div className="mt-3 flex gap-2.5 rounded-lg border border-interactive/25 bg-interactive/8 p-3">
-                    <MapPinned className="mt-0.5 size-4 shrink-0 text-interactive" aria-hidden="true" />
-                    <div>
-                      <p className="text-[13px] font-semibold leading-[1.4] text-interactive">Next move</p>
-                      <p className="mt-1 text-pretty text-[12px] leading-[1.5] text-muted-foreground">
-                        {step.guidance}
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
-                {step.allowedTools ? (
-                  <div className="mt-3 flex gap-2.5 rounded-lg border border-warning/30 bg-warning/8 p-3">
-                    <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
-                    <div>
-                      <p className="text-[13px] font-semibold leading-[1.4] text-warning">Search is disabled</p>
-                      <p className="mt-1 text-pretty text-[12px] leading-[1.5] text-muted-foreground">
-                        The learner and agent must reason from the building, hints, and system context.
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2 text-[13px] font-semibold text-success">
-                  <CheckCircle2 className="size-4" aria-hidden="true" /> Mission complete
-                </div>
-                <p className="mt-2 text-pretty text-[15px] leading-[1.5]">{summarise(session)}</p>
-              </div>
-            )}
-          </section>
-
-          {lastVerdict?.verdict ? (
-            <section
-              aria-live="polite"
-              className={`surface-pop border-b border-border px-5 py-4 ${
-                lastVerdict.verdict.kind === "correct"
-                  ? "bg-success/6"
-                  : lastVerdict.verdict.kind === "near"
-                    ? "bg-warning/6"
-                    : "bg-destructive/6"
-              }`}
-            >
-              <h2 className="text-[13px] font-semibold leading-[1.4]">Latest feedback</h2>
-              <p className="mt-2 text-[13px] font-semibold leading-relaxed">
-                {lastVerdict.verdict.message}
-              </p>
-              {lastVerdict.verdict.diagnosis ? (
-                <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                  {lastVerdict.verdict.diagnosis}
-                </p>
-              ) : null}
-            </section>
-          ) : null}
-
-          <section className="border-b border-border p-4">
-            <div className="grid grid-cols-3 gap-2">
-              <MissionControl
-                icon={Lightbulb}
-                label={
-                  step && session.hintsUsed < step.hints.length
-                    ? `Hint · ${step.hints.length - session.hintsUsed}`
-                    : "No hints"
-                }
-                onClick={onHint}
-                disabled={!step || session.hintsUsed >= (step?.hints.length ?? 0)}
+          {step ? (
+            <>
+              <MissionProgress session={session} stages={stages} />
+              <MissionControls
+                session={session}
+                onHint={onHint}
+                onSection={onSection}
+                sectionOn={sectionOn}
+                onReplay={onReplay}
+                replaying={replaying}
               />
-              <MissionControl
-                icon={Eye}
-                label={sectionOn ? "Restore ceiling" : "Open ceiling"}
-                onClick={onSection}
-                active={sectionOn}
-              />
-              <MissionControl
-                icon={RotateCcw}
-                label={replaying ? "Replaying" : "Replay decisions"}
-                onClick={onReplay}
-                disabled={replaying || !session.decisions.some((item) => item.verdict)}
-              />
-            </div>
-          </section>
+            </>
+          ) : (
+            <MissionDebrief session={session} onReplay={onReplay} replaying={replaying} />
+          )}
 
-          <Collapsible defaultOpen className="border-b border-border">
-            <CollapsibleTrigger className="group flex w-full items-center justify-between px-5 py-3.5 text-left transition-colors hover:bg-surface-hover">
+          <Collapsible defaultOpen className="border-b border-border/70 bg-muted/[0.03]">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground">
               <span>
-                <span className="block text-[13px] font-semibold leading-[1.4]">Live floor plan</span>
-                <span className="mt-0.5 block text-[12px] leading-[1.4] text-muted-foreground">
+                <span className="block text-[12px] font-semibold leading-[1.4]">Live floor plan</span>
+                <span className="mt-0.5 block text-[11px] leading-[1.4] text-text-tertiary">
                   {session.room
                     ? ROOMS.find((room) => room.id === session.room)?.name
                     : "Outside the building"}
@@ -247,8 +143,8 @@ export function TrainingPanel({
                 <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
               </span>
             </CollapsibleTrigger>
-            <CollapsibleContent className="px-5 pb-4">
-              <div className="overflow-hidden rounded-xl border border-border bg-viewer-surface p-2">
+            <CollapsibleContent className="px-4 pb-3">
+              <div className="overflow-hidden rounded-lg border border-border/80 bg-viewer-surface p-2">
                 <FloorPlan
                   level={session.level}
                   position={session.position}
@@ -260,14 +156,17 @@ export function TrainingPanel({
             </CollapsibleContent>
           </Collapsible>
 
-          {session.coaching.length ? (
-            <section className="surface-pop border-b border-border px-5 py-4">
-              <div className="mb-2 flex items-center gap-2">
-                <Bot className="size-4 text-muted-foreground" aria-hidden="true" />
-                <h2 className="text-[13px] font-semibold leading-[1.4]">Coach</h2>
+          {latestCoach ? (
+            <section
+              key={latestCoach.at}
+              className="surface-pop border-b border-border/70 bg-muted/[0.025] px-4 py-3"
+            >
+              <div className="mb-1.5 flex items-center gap-2 text-muted-foreground">
+                <Bot className="size-3.5" aria-hidden="true" />
+                <h2 className="text-[11px] font-semibold leading-[1.4]">Coach</h2>
               </div>
-              <p className="text-pretty text-[12px] leading-[1.5] text-muted-foreground">
-                {session.coaching.at(-1)?.text}
+              <p className="text-pretty text-[11px] leading-[1.5] text-text-tertiary">
+                {latestCoach.text}
               </p>
             </section>
           ) : null}
@@ -337,7 +236,7 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
           <span className="flex items-center gap-2">
             <Timer className="size-4" aria-hidden="true" /> Start the 90-second drill
           </span>
-          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          <ArrowRight className="workspace-action-arrow size-4" aria-hidden="true" />
         </Button>
 
         <div className="mt-4 border-t border-border pt-4">
@@ -424,33 +323,69 @@ function MissionControl({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
-      className={`h-auto min-h-16 flex-col items-start justify-between gap-2 p-2.5 text-left font-normal ${
+      className={`h-8 gap-2 px-2 text-[11px] font-medium ${
         active
-          ? "border-foreground/40 bg-muted text-foreground"
-          : "bg-muted/15 text-muted-foreground hover:text-foreground"
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:text-foreground"
       }`}
     >
-      <Icon className="size-4" aria-hidden="true" />
-      <span className="whitespace-normal text-[12px] font-semibold leading-[1.3]">{label}</span>
+      <Icon className="size-3.5" aria-hidden="true" />
+      <span>{label}</span>
     </Button>
   );
 }
 
-function summarise(session: TrainingSession): string {
-  const picks = session.decisions.filter((decision) => decision.kind === "select");
-  const wrong = picks.filter((decision) => decision.verdict?.kind !== "correct").length;
-  const hints = session.progress.reduce((sum, progress) => sum + progress.hintsUsed, 0);
-  const metres = Math.round(
-    session.trail.reduce((total, point, index) => {
-      if (index === 0) return 0;
-      const previous = session.trail[index - 1];
-      const distance = Math.hypot(point[0] - previous[0], point[2] - previous[2]);
-      return total + (distance < 6 ? distance : 0);
-    }, 0),
+function MissionControls({
+  session,
+  onHint,
+  onSection,
+  sectionOn,
+  onReplay,
+  replaying,
+}: {
+  session: TrainingSession;
+  onHint: () => void;
+  onSection: () => void;
+  sectionOn: boolean;
+  onReplay: () => void;
+  replaying: boolean;
+}) {
+  const step = session.step;
+  if (!step) return null;
+
+  const hintsRemaining = step.hints.length - session.hintsUsed;
+  const canReplay = session.decisions.some((decision) => decision.verdict);
+
+  return (
+    <section aria-label="Mission controls" className="border-b border-border/70 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1">
+        {hintsRemaining > 0 ? (
+          <MissionControl
+            icon={Lightbulb}
+            label={`Hint · ${hintsRemaining}`}
+            onClick={onHint}
+          />
+        ) : null}
+        <MissionControl
+          icon={Eye}
+          label={sectionOn ? "Restore ceiling" : "Open ceiling"}
+          onClick={onSection}
+          active={sectionOn}
+        />
+        {canReplay ? (
+          <MissionControl
+            icon={RotateCcw}
+            label={replaying ? "Replaying…" : "Replay"}
+            onClick={onReplay}
+            disabled={replaying}
+          />
+        ) : null}
+      </div>
+    </section>
   );
-  return `${picks.length - wrong} correct first-time selection${picks.length - wrong === 1 ? "" : "s"}, ${wrong} learning moment${wrong === 1 ? "" : "s"}, ${hints} hint${hints === 1 ? "" : "s"}, and ${metres} m walked.`;
 }

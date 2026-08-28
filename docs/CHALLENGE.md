@@ -15,7 +15,8 @@
 3. Attempt `training_locate_element` during the navigation step and observe the deterministic refusal in the activity log.
 4. Walk to Room 214 with the default-open floor plan tracking the route, request a hint, and use the clickable marker or tolerant 3D selection.
 5. After identifying the leak, follow the inline wayfinding guidance to the riser cupboard. Choose the downstream terminal valve and compare its near-miss diagnosis with the correct floor isolation.
-6. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
+6. Complete the mission and review the debrief card: final action, session metrics, and primary replay path.
+7. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
 
 ## Judging alignment
 
@@ -53,6 +54,7 @@ The earlier proof of concept lived in a separate local `layer0` workspace. This 
 - Strict WebMCP schemas, guarded tool sets, and clear native/polyfill status.
 - Singular toggleable selection, clickable markers, pointer gesture safety, and selection feedback.
 - Default-open floor plan keeps route history legible without drawing it over the 3D building.
+- Unified stage progress carries the active instruction, scopes verdict feedback to the stage it grades, and ends in a focused mission debrief.
 - BimWalk lifecycle and stale-async protections.
 - Open-source license, notices, provenance, and release documentation.
 
