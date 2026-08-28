@@ -100,7 +100,7 @@ export const MISSIONS: Record<string, Mission> = {
         prompt:
           "Trace the pipe upstream. Select the nearest chilled-water valve that stops this leak without shutting down the whole building.",
         guidance:
-          "The valve is not in Room 214. Follow your route west on the open floor plan to the Level 1 riser cupboard, then hover over the paired valves in 3D to distinguish chilled water from heating.",
+          "The valve is not in Room 214. Leave the room and cross the corridor to the Level 1 riser cupboard, then hover over the paired valves in 3D to distinguish chilled water from heating.",
         validSelections: ["CHW-VLV-L1"],
         nearMisses: [
           {
