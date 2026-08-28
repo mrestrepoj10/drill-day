@@ -674,7 +674,7 @@ export function TrainingDemo() {
               ) : null}
 
               {session.status === "running" ? (
-                <span className="flex items-center gap-1 text-muted-foreground">
+                <span className="workspace-viewer-objective flex items-center gap-1 text-muted-foreground">
                   {session.step?.mode === "reach" ? (
                     <>Reach {destinationLabel ?? "the target room"}</>
                   ) : session.selection ? (

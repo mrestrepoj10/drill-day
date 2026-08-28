@@ -10,7 +10,7 @@ Show the launch screen, generated incident brief, three stages, Scene API badge,
 
 > The first task is spatial: find Room 214 on foot. The plan reports position, but it cannot teleport me. Level shortcuts, search, locate, and manual advance are disabled because wayfinding is the exercise.
 
-Walk far enough to show the route updating in the default-open floor plan while the 3D scene stays uncluttered, and point out the room signs. Open the agent activity panel if necessary.
+Walk far enough to show the route updating in the default-open floor plan while the 3D scene stays uncluttered, and point out how the active stage carries the instruction in one progress surface. Open the agent activity panel if necessary.
 
 ## 0:48–1:15 — WebMCP and guardrails
 
@@ -22,7 +22,7 @@ Run **Prove the guardrail**. Keep the refusal and allowed read/hint calls visibl
 
 > Once inside Room 214, the scene opens the real diagnosis: the fan coil is wet, but water runs downhill. The leaking part is the split drop above it. Picking has screen-space tolerance for small services and still refuses targets hidden behind walls. A wrong-but-plausible valve gets a specific explanation, not a generic failure.
 
-Show a hint marker, select the leak, and call out the new “Next move” directions to the riser cupboard. Choose the Room 214 terminal valve as a near miss, click it again to clear the selection, then select the first-floor chilled-water isolation as the correct answer.
+Show a hint marker, select the leak, and call out the new “Next move” directions to the riser cupboard. Choose the Room 214 terminal valve as a near miss, note that its feedback is labeled for the Isolate stage, click it again to clear the selection, then select the first-floor chilled-water isolation as the correct answer. Briefly show the completion debrief and its primary Replay action.
 
 ## 1:48–2:10 — agent-authored training
 
