@@ -60,6 +60,9 @@ export const MISSIONS: Record<string, Mission> = {
         mode: "reach",
         prompt: "Find Room 214 on Level 1. Follow the corridor west and read the building signs.",
         startState: { walkTo: [44, L1, 16], facing: [20, L1, 16] },
+        learningCues: {
+          rooms: ["AHU-L1", "ROOM-214", "ROOM-215", "ROOM-218"],
+        },
         validDestination: { room: "ROOM-214" },
         allowedTools: NO_SEARCH,
         hints: [
@@ -126,6 +129,9 @@ export const MISSIONS: Record<string, Mission> = {
               "bracket, which is exactly why it gets closed by mistake at three in the morning.",
           },
         ],
+        learningCues: {
+          elements: ["CHW-VLV-214", "CHW-VLV-L1", "HTG-VLV-L1"],
+        },
         allowedTools: NO_SEARCH,
         hints: [
           { text: "Trace the pipe backwards from the split. Where does this floor get its water?" },

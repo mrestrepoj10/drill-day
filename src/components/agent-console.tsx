@@ -531,6 +531,18 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
   if (decision.kind === "hint") {
     return { id: `decision-${decision.at}-${index}`, at: decision.at, actor: "Learner", title: "Requested a hint", tone: "near" };
   }
+  if (decision.kind === "cue") {
+    return {
+      id: `decision-${decision.at}-${index}`,
+      at: decision.at,
+      actor: "Learner",
+      title: `Turned learning cues ${decision.enabled ? "on" : "off"}`,
+      detail: decision.enabled
+        ? "Candidate context is emphasized in the floor plan and 3D scene."
+        : "The scene returned to its unassisted view.",
+      tone: "neutral",
+    };
+  }
   if (decision.kind === "deselect") {
     return {
       id: `decision-${decision.at}-${index}`,

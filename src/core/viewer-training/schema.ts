@@ -51,6 +51,13 @@ export interface NearMiss {
   diagnosis: string
 }
 
+export interface LearningCues {
+  /** A fair candidate set to emphasize together, never a singular answer reveal. */
+  elements?: ElementRef[]
+  /** Broader spatial context to emphasize without drawing a route to the answer. */
+  rooms?: string[]
+}
+
 export interface TrainingStep {
   id: string
   prompt: string
@@ -61,6 +68,8 @@ export interface TrainingStep {
   startState?: ViewerState
   validSelections?: ElementRef[]
   nearMisses?: NearMiss[]
+  /** Optional authored cue set. Select steps otherwise use answers + near misses. */
+  learningCues?: LearningCues
   validDestination?: SpatialRegion
   /** Rooms the route must not pass through. Checked as the learner walks. */
   avoidRooms?: string[]
@@ -140,10 +149,11 @@ export interface SelectionResult {
 export interface Decision {
   at: number
   stepId: string
-  kind: "select" | "inspect" | "deselect" | "arrive" | "hint" | "blocked" | "stray" | "enter"
+  kind: "select" | "inspect" | "deselect" | "arrive" | "hint" | "cue" | "blocked" | "stray" | "enter"
   element?: ElementRef
   room?: string
   position?: Vec3
+  enabled?: boolean
   verdict?: Verdict
 }
 
@@ -164,6 +174,8 @@ export interface TrainingSession {
   status: "idle" | "running" | "complete"
   attempts: number
   hintsUsed: number
+  /** One shared switch for the authored cue layer in the plan and 3D scene. */
+  learningCuesOn: boolean
   /** Hints already spent on this step, in order. */
   revealed: Hint[]
   /** Current scene selection. Replacing it never erases the decision history. */
@@ -178,4 +190,27 @@ export interface TrainingSession {
   coaching: { at: number; from: "app" | "agent"; text: string }[]
   /** Path the learner has walked, for the replay. */
   trail: Vec3[]
+}
+
+/**
+ * Select steps emphasize the answer beside its meaningful near misses, so the
+ * learner gets vocabulary and scale without being told which candidate wins.
+ * A mission can replace that default when a smaller, fairer set is needed.
+ */
+export function learningCueElements(step: TrainingStep | undefined): ElementRef[] {
+  if (!step) return []
+  if (step.learningCues?.elements) {
+    const authored = [...new Set(step.learningCues.elements)]
+    return authored.length > 1 ? authored : []
+  }
+  if (step.mode !== "select") return []
+  const candidates = [...new Set([
+    ...(step.validSelections ?? []),
+    ...(step.nearMisses ?? []).map((nearMiss) => nearMiss.id),
+  ])]
+  return candidates.length > 1 ? candidates : []
+}
+
+export function learningCueRooms(step: TrainingStep | undefined): string[] {
+  return [...new Set(step?.learningCues?.rooms ?? [])]
 }
