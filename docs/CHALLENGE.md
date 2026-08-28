@@ -13,8 +13,8 @@
 1. Start **Leak in Room 214**.
 2. Ask the agent: “Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.”
 3. Attempt `training_locate_element` during the navigation step and observe the deterministic refusal in the activity log.
-4. Walk to Room 214, request a hint, and use the clickable marker or tolerant 3D selection.
-5. Choose the downstream terminal valve and compare its near-miss diagnosis with the correct floor isolation.
+4. Walk to Room 214 with the default-open floor plan tracking the route, request a hint, and use the clickable marker or tolerant 3D selection.
+5. After identifying the leak, follow the inline wayfinding guidance to the riser cupboard. Choose the downstream terminal valve and compare its near-miss diagnosis with the correct floor isolation.
 6. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
 
 ## Judging alignment
@@ -48,10 +48,11 @@ The earlier proof of concept lived in a separate local `layer0` workspace. This 
 - Current Next.js 16 App Router scaffold and Vercel packaging.
 - Reauthored flagship flow, instructions, and visual hierarchy.
 - GPT Image incident brief and corresponding Scene API environmental pass.
-- Room signage, route stripe, hazard thresholds, leak puddle, and equipment detail.
+- Room signage, hazard thresholds, leak puddle, and equipment detail.
 - Human/scene/agent activity timeline.
 - Strict WebMCP schemas, guarded tool sets, and clear native/polyfill status.
-- Selection tolerance, clickable markers, pointer gesture safety, and selection feedback.
+- Singular toggleable selection, clickable markers, pointer gesture safety, and selection feedback.
+- Default-open floor plan keeps route history legible without drawing it over the 3D building.
 - BimWalk lifecycle and stale-async protections.
 - Open-source license, notices, provenance, and release documentation.
 

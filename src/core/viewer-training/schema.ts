@@ -54,6 +54,8 @@ export interface NearMiss {
 export interface TrainingStep {
   id: string
   prompt: string
+  /** Optional, immediately actionable wayfinding shown beside the objective. */
+  guidance?: string
   /** What the learner is being asked to do, for the verdict copy. */
   mode: "select" | "reach"
   startState?: ViewerState
@@ -122,10 +124,23 @@ export interface Verdict {
   element?: ElementRef
 }
 
+/** The one element currently selected in the shared scene. */
+export interface TrainingSelection {
+  element: ElementRef
+  /** Browsing selections have no verdict; exercise answers carry their mark. */
+  verdict?: Verdict
+}
+
+export interface SelectionResult {
+  action: "selected" | "cleared" | "blocked"
+  message: string
+  verdict?: Verdict
+}
+
 export interface Decision {
   at: number
   stepId: string
-  kind: "select" | "arrive" | "hint" | "blocked" | "stray" | "enter"
+  kind: "select" | "inspect" | "deselect" | "arrive" | "hint" | "blocked" | "stray" | "enter"
   element?: ElementRef
   room?: string
   position?: Vec3
@@ -151,6 +166,8 @@ export interface TrainingSession {
   hintsUsed: number
   /** Hints already spent on this step, in order. */
   revealed: Hint[]
+  /** Current scene selection. Replacing it never erases the decision history. */
+  selection?: TrainingSelection
   decisions: Decision[]
   progress: StepProgress[]
   /** Where the learner is standing, and which room that is. */

@@ -36,9 +36,9 @@ If the browser does not yet implement WebMCP, a faithful same-document polyfill 
 - Autodesk Viewer 7 Scene API builds the model at runtime, so the demo needs no APS token or uploaded design file.
 - Stable training IDs stay separate from Scene API instance IDs.
 - Exact hit testing is backed by a screen-space semantic fallback for small valves, with an occlusion guard to prevent through-wall answers.
-- Revealed labels are accessible buttons, while drag distance and pointer identity prevent BimWalk gestures from becoming accidental selections.
-- The floor plan reports live position but cannot teleport a learner past a navigation objective.
-- The activity log merges agent calls, learner selections, guardrails, coaching, and room-entry events.
+- Revealed labels are accessible buttons, while drag distance and pointer identity prevent BimWalk gestures from becoming accidental selections. Selection is singular and clicking the selected component again clears it.
+- The floor plan opens by default, keeps the walked route out of the 3D scene, and cannot teleport a learner past a navigation objective.
+- The activity log merges agent calls, learner selections and deselections, guardrails, coaching, and room-entry events.
 
 The incident briefing image was generated specifically for this project with GPT Image and used as visual art direction for the Scene API treatment: dark services, open ceiling grid, route markings, operational signage, leak context, and wet-floor details. See [asset provenance](public/media/README.md).
 

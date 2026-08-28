@@ -12,7 +12,12 @@ import {
 } from "react";
 import { Stage } from "@layer0/scene-render";
 import { pushAmbientContext, useModelContext, useModelContextTools } from "@layer0/webmcp";
-import { loadTraining, type TrainingSession, type ViewerTraining } from "@layer0/viewer-training";
+import {
+  loadTraining,
+  type SelectionResult,
+  type TrainingSession,
+  type ViewerTraining,
+} from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, EYE, LEVELS, ROOMS, STOREY } from "@/lib/training/facility";
 import { MISSIONS, ROLES } from "@/lib/training/missions";
 import { trainingTools } from "@/lib/training/tools";
@@ -201,10 +206,6 @@ export function TrainingDemo() {
     setActivityPaneOpen(false);
   };
 
-  useEffect(() => {
-    sceneRef.current?.drawTrail(session.trail);
-  }, [session.trail]);
-
   // Learner events flow *to* the agent too, where the host supports ambient
   // context, so ChatGPT can react to a room entry or a selection unprompted.
   // On hosts without provideContext this is a silent no-op.
@@ -221,8 +222,10 @@ export function TrainingDemo() {
         ? `The learner just entered ${room}.`
         : decision.kind === "arrive" && room
           ? `The learner reached ${room}.`
-          : decision.kind === "select" && element
+          : (decision.kind === "select" || decision.kind === "inspect") && element
             ? `The learner selected ${element}${decision.verdict ? ` — ${decision.verdict.kind}` : ""}.`
+            : decision.kind === "deselect" && element
+              ? `The learner cleared ${element} from the selection.`
             : undefined;
       if (line) pushAmbientContext(`Drill Day update: ${line} Call training_get_session for detail.`);
     }
@@ -267,7 +270,6 @@ export function TrainingDemo() {
         training.exitWalk();
         training.setSection(CUTAWAY_Y);
         setSectionOn(false);
-        sceneRef.current?.clearTrail();
         getStage()?.setView(OVERVIEW);
         return;
       }
@@ -288,7 +290,6 @@ export function TrainingDemo() {
             if (!training) return;
             setReplaying(true);
             try {
-              sceneRef.current?.drawTrail(training.snapshot().trail);
               await training.replay();
             } finally {
               setReplaying(false);
@@ -308,6 +309,22 @@ export function TrainingDemo() {
     ],
   }), [session.level, session.room, session.step]);
 
+  const showSelectionResult = useCallback((result: SelectionResult) => {
+    const verdict = result.verdict;
+    setNotice({
+      message: result.message,
+      tone: result.action === "cleared"
+        ? "neutral"
+        : verdict?.kind === "correct"
+          ? "good"
+          : verdict?.kind === "near" || result.action === "blocked"
+            ? "near"
+            : verdict
+              ? "bad"
+              : "neutral",
+    });
+  }, []);
+
   const answerAt = useCallback(
     (clientX: number, clientY: number) => {
       const element = sceneRef.current?.pick(clientX, clientY, {
@@ -320,21 +337,16 @@ export function TrainingDemo() {
       }
       const current = training.snapshot();
       if (current.status !== "running") {
-        void training.applyViewerState({ highlight: [{ ids: [element.id], tone: "trace" }] });
-        setNotice({ message: `${element.name} · ${element.system}`, tone: "neutral" });
+        showSelectionResult(training.toggleSelection(element.id));
         return;
       }
       if (current.step?.mode === "reach") {
         setNotice({ message: "Navigation step: walk to the destination. Selecting cannot complete it.", tone: "near" });
         return;
       }
-      const verdict = training.submitSelection(element.id);
-      setNotice({
-        message: verdict.message,
-        tone: verdict.kind === "correct" ? "good" : verdict.kind === "near" ? "near" : "bad",
-      });
+      showSelectionResult(training.toggleSelection(element.id));
     },
-    [pickContext, training],
+    [pickContext, showSelectionResult, training],
   );
 
   const press = useRef<{
@@ -414,30 +426,25 @@ export function TrainingDemo() {
   const markers = useMemo<Marker[]>(() => {
     const ids = new Set<string>();
     for (const hint of session.revealed) for (const id of hint.reveals ?? []) ids.add(id);
-    const last = session.decisions.findLast((decision) => decision.element && decision.verdict);
-    if (last?.element) ids.add(last.element);
+    if (session.selection?.element) ids.add(session.selection.element);
     return [...ids].flatMap((id) => {
       const element = ELEMENT_BY_ID.get(id);
       if (!element) return [];
-      const verdict = last?.element === id ? last.verdict?.kind : undefined;
+      const verdict = session.selection?.element === id ? session.selection.verdict?.kind : undefined;
       return [{
         id,
         point: element.position as [number, number, number],
         tone: verdict === "correct" ? "cool" : verdict === "near" ? "warm" : verdict ? "alert" : "neutral",
-        onSelect: session.step?.mode === "select"
+        onSelect: session.status !== "running" || session.step?.mode === "select"
           ? () => {
               if (!training) return;
-              const result = training.submitSelection(id);
-              setNotice({
-                message: result.message,
-                tone: result.kind === "correct" ? "good" : result.kind === "near" ? "near" : "bad",
-              });
+              showSelectionResult(training.toggleSelection(id));
             }
           : undefined,
         children: <b>{element.name}</b>,
       } satisfies Marker];
     });
-  }, [session.revealed, session.decisions, session.step?.mode, training]);
+  }, [session.revealed, session.selection, session.status, session.step?.mode, showSelectionResult, training]);
 
   const roomSigns = useMemo<Marker[]>(() => {
     if (!session.mission || session.level !== 1) return [];
@@ -670,6 +677,8 @@ export function TrainingDemo() {
                 <span className="flex items-center gap-1 text-muted-foreground">
                   {session.step?.mode === "reach" ? (
                     <>Reach {destinationLabel ?? "the target room"}</>
+                  ) : session.selection ? (
+                    <><MousePointer2 className="size-3" aria-hidden="true" /> Click the selected component again to clear</>
                   ) : (
                     <>
                       <MousePointer2 className="size-3" aria-hidden="true" /> Click a component to answer
