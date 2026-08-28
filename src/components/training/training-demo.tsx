@@ -26,10 +26,8 @@ import { TrainingPanel } from "@/components/training/panel";
 import { AgentConsole, type Drill } from "@/components/agent-console";
 import { StageStatus, useStage } from "@/components/use-stage";
 import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CUTAWAY_Y = LEVELS * STOREY - 0.6;
@@ -505,30 +503,16 @@ export function TrainingDemo() {
             </span>
             <span>Drill Day</span>
           </Link>
-          <Separator orientation="vertical" className="workspace-brand-separator" />
-          <Badge variant="outline" className="workspace-product-badge">WebMCP</Badge>
+          <span className="workspace-brand-context">
+            <span aria-hidden="true">·</span>
+            WebMCP challenge
+          </span>
         </div>
-
-        <nav className="workspace-navbar-links" aria-label="Primary navigation">
-          <Button asChild variant="secondary" size="sm" className="workspace-navbar-link">
-            <a href="#training-workspace" aria-current="page">Demo</a>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled
-            title="Creator memo coming soon"
-            className="workspace-navbar-link disabled:opacity-100"
-          >
-            Creator memo
-          </Button>
-        </nav>
 
         <div className="workspace-navbar-actions">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             aria-label="Mission"
             aria-controls="mission-panel"
@@ -537,14 +521,14 @@ export function TrainingDemo() {
               setMissionPaneOpen((open) => !open);
               setActivityPaneOpen(false);
             }}
-            className="hidden max-[1499px]:inline-flex"
+            className="workspace-utility-action hidden max-[1499px]:inline-flex"
           >
             <PanelLeft className="size-3.5" aria-hidden="true" />
             <span className="workspace-trigger-label">Mission</span>
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             aria-label={unseen ? `Agent activity, ${unseen} new events` : "Agent activity"}
             aria-controls="agent-console"
@@ -559,7 +543,10 @@ export function TrainingDemo() {
             <Activity className="size-3.5" aria-hidden="true" />
             <span className="workspace-trigger-label">Activity</span>
             {unseen > 0 ? (
-              <span className="rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-4 text-background">
+              <span
+                key={unseen}
+                className="workspace-activity-count rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-4 text-background"
+              >
                 {unseen}
               </span>
             ) : null}
