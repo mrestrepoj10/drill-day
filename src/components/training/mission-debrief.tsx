@@ -28,6 +28,7 @@ export function MissionDebrief({
         (decision) => decision.stepId === finalStep.id && decision.verdict?.kind === "correct",
       )
     : undefined;
+  const finalAction = finalDecision?.verdict?.message;
   const metrics = summarise(session);
 
   return (
@@ -48,9 +49,11 @@ export function MissionDebrief({
 
         <CardContent className="px-4 pb-4">
           <div className="border-y border-success/15 py-3">
-            <p className="text-[11px] font-semibold leading-[1.4] text-success">Final action</p>
+            <p className="text-[11px] font-semibold leading-[1.4] text-success">
+              {finalAction ? "Final action" : "Completion note"}
+            </p>
             <p className="mt-1 text-pretty text-[13px] font-semibold leading-[1.55]">
-              {finalDecision?.verdict?.message ?? finalStep?.successMessage ?? "All objectives cleared."}
+              {finalAction ?? "The final stage was advanced without a verified action."}
             </p>
           </div>
 
