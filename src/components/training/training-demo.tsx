@@ -12,6 +12,7 @@ import {
 import { Stage } from "@layer0/scene-render";
 import { pushAmbientContext, useModelContext, useModelContextTools } from "@layer0/webmcp";
 import {
+  learningCueRooms,
   loadTraining,
   type SelectionResult,
   type TrainingSession,
@@ -39,6 +40,7 @@ const IDLE: TrainingSession = {
   status: "idle",
   attempts: 0,
   hintsUsed: 0,
+  learningCuesOn: true,
   revealed: [],
   decisions: [],
   progress: [],
@@ -224,7 +226,9 @@ export function TrainingDemo() {
             ? `The learner selected ${element}${decision.verdict ? ` — ${decision.verdict.kind}` : ""}.`
             : decision.kind === "deselect" && element
               ? `The learner cleared ${element} from the selection.`
-            : undefined;
+              : decision.kind === "cue"
+                ? `The learner turned learning cues ${decision.enabled ? "on" : "off"}.`
+                : undefined;
       if (line) pushAmbientContext(`Drill Day update: ${line} Call training_get_session for detail.`);
     }
   }, [session.decisions]);
@@ -446,20 +450,25 @@ export function TrainingDemo() {
 
   const roomSigns = useMemo<Marker[]>(() => {
     if (!session.mission || session.level !== 1) return [];
+    const cueRooms = session.learningCuesOn
+      ? new Set(learningCueRooms(session.step))
+      : new Set<string>();
     return [
-      ["sign-ahu", [7, 6.35, 13.62], "AHU"],
-      ["sign-214", [20, 6.35, 13.62], "214"],
-      ["sign-215", [32, 6.35, 13.62], "215"],
-      ["sign-218", [43, 6.35, 13.62], "218"],
-    ].map(([id, point, label]) => ({
+      ["sign-ahu", [7, 6.35, 13.62], "AHU", "AHU-L1"],
+      ["sign-214", [20, 6.35, 13.62], "214", "ROOM-214"],
+      ["sign-215", [32, 6.35, 13.62], "215", "ROOM-215"],
+      ["sign-218", [43, 6.35, 13.62], "218", "ROOM-218"],
+    ].map(([id, point, label, roomId]) => ({
       id: String(id),
       point: point as [number, number, number],
+      tone: cueRooms.has(String(roomId)) ? "cool" : "neutral",
       children: <span className="font-mono font-semibold">{String(label)}</span>,
     }));
-  }, [session.level, session.mission]);
+  }, [session.learningCuesOn, session.level, session.mission, session.step]);
 
   const walking = session.status === "running" && !!session.position;
-  const roleLabel = ROLES.find((role) => role.id === roleId)?.label;
+  const activeRole = session.mission?.role ?? roleId;
+  const roleLabel = ROLES.find((role) => role.id === activeRole)?.label || activeRole || undefined;
   const locationLabel = session.room
     ? ROOMS.find((room) => room.id === session.room)?.name ?? session.room
     : "outside";
@@ -472,14 +481,15 @@ export function TrainingDemo() {
   const challengeNumber = challengeIndex >= 0
     ? String(challengeIndex + 1).padStart(2, "0")
     : undefined;
-  const challengeContext = session.mission?.author === "agent"
+  const challengeName = session.mission?.author === "agent"
     ? "Custom challenge"
     : challengeNumber
       ? `Challenge ${challengeNumber}`
       : "WebMCP challenge";
+  const challengeContext = roleLabel ? `${challengeName} · ${roleLabel}` : challengeName;
   const challengeLabel = challengeNumber
-    ? `${challengeContext} of ${String(ROLES.length).padStart(2, "0")}`
-    : challengeContext;
+    ? `${challengeName} of ${String(ROLES.length).padStart(2, "0")}`
+    : challengeName;
 
   // The movement tutorial has done its job once the learner has actually
   // walked; from then on the bar carries only the objective.
@@ -531,6 +541,8 @@ export function TrainingDemo() {
           replaying={replaying}
           compactOpen={missionPaneOpen}
           challengeLabel={challengeLabel}
+          roleLabel={roleLabel ?? "Custom role"}
+          onLearningCues={() => training?.toggleLearningCues()}
           onReplay={async () => {
             if (!training) return;
             setReplaying(true);

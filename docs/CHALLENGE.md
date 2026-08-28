@@ -13,10 +13,11 @@
 1. Start **Leak in Room 214**.
 2. Ask the agent: “Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.”
 3. Attempt `training_locate_element` during the navigation step and observe the deterministic refusal in the activity log.
-4. Walk to Room 214 with the default-open floor plan tracking the route, request a hint, and use the clickable marker or tolerant 3D selection.
-5. After identifying the leak, follow the inline wayfinding guidance to the riser cupboard. Choose the downstream terminal valve and compare its near-miss diagnosis with the correct floor isolation.
-6. Complete the mission and review the debrief card: final action, session metrics, and primary replay path.
-7. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
+4. Use the default-on Learning cues to compare the same fair candidate context in the floor plan and Scene API model, then toggle it off and on to see that learner choice enter the activity log.
+5. Walk to Room 214 with the default-open floor plan tracking the route, request a hint, and use the clickable marker or tolerant 3D selection.
+6. After identifying the leak, follow the inline wayfinding guidance to the riser cupboard. Choose the downstream terminal valve and compare its near-miss diagnosis with the correct floor isolation.
+7. Complete the mission and review the debrief card: final action, session metrics, and primary replay path.
+8. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
 
 ## Judging alignment
 
@@ -31,6 +32,7 @@
 
 - Tokenless Autodesk Scene API model with deterministic training graph.
 - Small-object tolerant picking with occlusion guard and accessible marker fallback.
+- Shared Learning cues emphasize fair candidate sets in both plan and Scene API views without identifying the correct answer.
 - First-person walk listener is active only during BimWalk, preventing orbit, replay, or camera tools from completing navigation.
 - Unified audit trail makes agent actions legible to the learner and to a recorded audience.
 

@@ -11,9 +11,14 @@ import {
   Lightbulb,
   MapPinned,
   RotateCcw,
+  ScanSearch,
   Timer,
 } from "lucide-react";
-import type { TrainingSession } from "@layer0/viewer-training";
+import {
+  learningCueElements,
+  learningCueRooms,
+  type TrainingSession,
+} from "@layer0/viewer-training";
 import { ROOMS } from "@/lib/training/facility";
 import { ROLES } from "@/lib/training/missions";
 import { MissionDebrief } from "@/components/training/mission-debrief";
@@ -55,6 +60,8 @@ export function TrainingPanel({
   replaying,
   compactOpen,
   challengeLabel,
+  roleLabel,
+  onLearningCues,
 }: {
   session: TrainingSession;
   onPickRole: (role: string) => void;
@@ -65,11 +72,15 @@ export function TrainingPanel({
   replaying: boolean;
   compactOpen: boolean;
   challengeLabel: string;
+  roleLabel: string;
+  onLearningCues: () => void;
 }) {
   const step = session.step;
   const mission = session.mission;
   const latestCoach = session.coaching.at(-1);
   const highlighted = session.revealed.flatMap((hint) => hint.reveals ?? []);
+  const cueElements = session.learningCuesOn ? learningCueElements(step) : [];
+  const cueRooms = session.learningCuesOn ? learningCueRooms(step) : [];
   const stages: MissionStageView[] = mission?.steps.map((item, index) => ({
     id: item.id,
     label: mission.id === "m-technician"
@@ -91,8 +102,10 @@ export function TrainingPanel({
       ) : (
         <>
           <header className="border-b border-border px-5 py-4">
-            <div className="text-[10px] font-semibold uppercase leading-[1.4] tracking-[0.12em] text-text-tertiary">
-              {challengeLabel}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-semibold uppercase leading-[1.4] tracking-[0.12em] text-text-tertiary">
+              <span>{challengeLabel}</span>
+              <span className="text-border" aria-hidden="true">/</span>
+              <span>{roleLabel}</span>
             </div>
             <h1 className="mt-1.5 text-balance text-[18px] font-semibold leading-[1.25] tracking-[-0.02em]">
               {mission.title}
@@ -107,6 +120,7 @@ export function TrainingPanel({
                 onHint={onHint}
                 onSection={onSection}
                 sectionOn={sectionOn}
+                onLearningCues={onLearningCues}
                 onReplay={onReplay}
                 replaying={replaying}
               />
@@ -146,6 +160,8 @@ export function TrainingPanel({
                   position={session.position}
                   room={session.room}
                   highlighted={highlighted}
+                  cueElements={cueElements}
+                  cueRooms={cueRooms}
                   trail={session.trail}
                 />
               </div>
@@ -309,12 +325,14 @@ function MissionControl({
   onClick,
   disabled,
   active,
+  accent,
 }: {
   icon: typeof Lightbulb;
   label: string;
   onClick: () => void;
   disabled?: boolean;
   active?: boolean;
+  accent?: boolean;
 }) {
   return (
     <Button
@@ -326,7 +344,9 @@ function MissionControl({
       aria-pressed={active}
       className={`h-8 gap-2 px-2 text-[11px] font-medium ${
         active
-          ? "bg-muted text-foreground"
+          ? accent
+            ? "bg-interactive/10 text-interactive hover:bg-interactive/15 hover:text-interactive"
+            : "bg-muted text-foreground"
           : "text-muted-foreground hover:text-foreground"
       }`}
     >
@@ -341,6 +361,7 @@ function MissionControls({
   onHint,
   onSection,
   sectionOn,
+  onLearningCues,
   onReplay,
   replaying,
 }: {
@@ -348,6 +369,7 @@ function MissionControls({
   onHint: () => void;
   onSection: () => void;
   sectionOn: boolean;
+  onLearningCues: () => void;
   onReplay: () => void;
   replaying: boolean;
 }) {
@@ -356,10 +378,20 @@ function MissionControls({
 
   const hintsRemaining = step.hints.length - session.hintsUsed;
   const canReplay = session.decisions.some((decision) => decision.verdict);
+  const hasLearningCues = learningCueElements(step).length > 0 || learningCueRooms(step).length > 0;
 
   return (
     <section aria-label="Mission controls" className="border-b border-border/70 px-3 py-2">
       <div className="flex flex-wrap items-center gap-1">
+        {hasLearningCues ? (
+          <MissionControl
+            icon={ScanSearch}
+            label={session.learningCuesOn ? "Cues on" : "Cues off"}
+            onClick={onLearningCues}
+            active={session.learningCuesOn}
+            accent
+          />
+        ) : null}
         {hintsRemaining > 0 ? (
           <MissionControl
             icon={Lightbulb}

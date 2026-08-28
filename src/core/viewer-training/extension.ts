@@ -8,6 +8,7 @@ import {
   traceDownstream,
   traceUpstream,
 } from "./evaluate"
+import { learningCueElements } from "./schema"
 import type {
   Decision,
   ElementRef,
@@ -33,6 +34,8 @@ export const TRAINING_EXTENSION_ID = "Layer0.ViewerTraining"
 export interface TrainingRenderer {
   highlight(groups: { ids: ElementRef[]; tone: HighlightTone }[]): void
   clearHighlights(): void
+  /** Contextual candidates shown together; separate from hints and verdicts. */
+  setLearningCues(ids: ElementRef[]): void
   /** Selection is singular; hint and agent highlights remain independently additive. */
   setSelection(selection: { id: ElementRef; tone: HighlightTone } | null): void
   isolate(ids: ElementRef[] | null): void
@@ -65,6 +68,7 @@ export interface ViewerTraining {
 
   toggleSelection(id: ElementRef): SelectionResult
   nextHint(): Hint | undefined
+  toggleLearningCues(): boolean
   advance(reason?: string): void
   coach(text: string, from?: "app" | "agent"): void
 
@@ -94,6 +98,7 @@ const EMPTY: TrainingSession = {
   status: "idle",
   attempts: 0,
   hintsUsed: 0,
+  learningCuesOn: true,
   revealed: [],
   decisions: [],
   progress: [],
@@ -187,6 +192,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
     clear(): void {
       this.exitWalk()
       this.renderer?.clearHighlights()
+      this.renderer?.setLearningCues([])
       this.renderer?.setSelection(null)
       this.renderer?.isolate(null)
       this.setSection(null)
@@ -198,6 +204,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       if (!step) return
       this.renderer?.clearHighlights()
       this.renderer?.setSelection(null)
+      this.syncLearningCues()
       if (step.startState) await this.applyViewerState(step.startState)
     }
 
@@ -229,6 +236,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       this.stepOpenedAt = Date.now()
       if (reason) this.coach(reason, "app")
       if (next) void this.openStep(next)
+      else this.renderer?.setLearningCues([])
       // Keep the final correct component lit for the completion/debrief view.
       // A new mission or replay clears it explicitly.
       this.emit()
@@ -351,6 +359,21 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       this.record({ kind: "hint" })
       this.emit()
       return hint
+    }
+
+    toggleLearningCues(): boolean {
+      const enabled = !this.session.learningCuesOn
+      this.session = { ...this.session, learningCuesOn: enabled }
+      this.syncLearningCues()
+      this.record({ kind: "cue", enabled })
+      this.emit()
+      return enabled
+    }
+
+    private syncLearningCues(): void {
+      this.renderer?.setLearningCues(
+        this.session.learningCuesOn ? learningCueElements(this.session.step) : [],
+      )
     }
 
     coach(text: string, from: "app" | "agent" = "agent"): void {

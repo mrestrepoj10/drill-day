@@ -70,6 +70,7 @@ const TONE_COLOR: Record<HighlightTone, number> = {
  */
 export class TrainingScene implements TrainingRenderer {
   private highlighted = new Map<string, HighlightTone>()
+  private learningCues = new Set<string>()
   private selection: { id: string; tone: HighlightTone } | null = null
   private isolated: Set<string> | null = null
   private ceiling: string[] = []
@@ -716,6 +717,11 @@ export class TrainingScene implements TrainingRenderer {
     this.syncHighlights()
   }
 
+  setLearningCues(ids: string[]): void {
+    this.learningCues = new Set(ids)
+    this.syncHighlights()
+  }
+
   setSelection(selection: { id: string; tone: HighlightTone } | null): void {
     this.selection = selection
     this.syncHighlights()
@@ -773,7 +779,10 @@ export class TrainingScene implements TrainingRenderer {
   private syncHighlights(): void {
     const stage = this.stage
     const wanted = new Set<string>()
-    const visible = new Map(this.highlighted)
+    const visible = new Map<string, HighlightTone>(
+      [...this.learningCues].map((id) => [id, "trace"]),
+    )
+    for (const [id, tone] of this.highlighted) visible.set(id, tone)
     if (this.selection) visible.set(this.selection.id, this.selection.tone)
     for (const [id, tone] of visible) {
       const element = ELEMENT_BY_ID.get(id)

@@ -18,6 +18,8 @@ export function FloorPlan({
   position,
   room,
   highlighted,
+  cueElements,
+  cueRooms,
   trail,
   onPickRoom,
 }: {
@@ -25,19 +27,27 @@ export function FloorPlan({
   position?: Vec3;
   room?: string;
   highlighted: string[];
+  cueElements: string[];
+  cueRooms: string[];
   trail: Vec3[];
   onPickRoom?: (roomId: string) => void;
 }) {
   const w = FOOTPRINT.x + PAD * 2;
   const h = FOOTPRINT.z + PAD * 2;
   const rooms = ROOMS.filter((r) => r.level === level);
-  const marks = ELEMENTS.filter((e) => e.level === level && highlighted.includes(e.id));
+  const markedIds = new Set([...cueElements, ...highlighted]);
+  const marks = ELEMENTS.filter((e) => e.level === level && markedIds.has(e.id));
   const here = trail.filter(
     (p) => Math.abs(p[1] - 1.7 - level * 4) < 2 && p[0] > -20 && p[0] < 70,
   );
 
   return (
-    <svg viewBox={`${-PAD} ${-PAD} ${w} ${h}`} className="w-full" role="img" aria-label={`Plan of level ${level}`}>
+    <svg
+      viewBox={`${-PAD} ${-PAD} ${w} ${h}`}
+      className="w-full"
+      role="img"
+      aria-label={`Plan of level ${level}${cueElements.length || cueRooms.length ? ", with learning cues" : ""}`}
+    >
       <rect x={-PAD} y={-PAD} width={w} height={h} className="fill-muted/40" />
       {rooms.map((r) => {
         const [x0, z0, x1, z1] = r.bounds;
@@ -52,6 +62,16 @@ export function FloorPlan({
               className={active ? "fill-foreground/15 stroke-foreground" : "fill-background stroke-border"}
               strokeWidth={0.28}
             />
+            {cueRooms.includes(r.id) ? (
+              <rect
+                x={x0}
+                y={z0}
+                width={x1 - x0}
+                height={z1 - z0}
+                className="pointer-events-none fill-interactive/10 stroke-interactive"
+                strokeWidth={0.45}
+              />
+            ) : null}
             <text
               x={(x0 + x1) / 2}
               y={(z0 + z1) / 2 + 0.5}
@@ -76,17 +96,22 @@ export function FloorPlan({
         />
       )}
 
-      {marks.map((m) => (
-        <circle
-          key={m.id}
-          cx={m.position[0]}
-          cy={m.position[2]}
-          r={0.9}
-          fill={`#${(SYSTEM_COLOR[m.system] ?? 0x888888).toString(16).padStart(6, "0")}`}
-          stroke="var(--warning)"
-          strokeWidth={0.4}
-        />
-      ))}
+      {marks.map((m) => {
+        const revealed = highlighted.includes(m.id);
+        return (
+          <circle
+            key={m.id}
+            cx={m.position[0]}
+            cy={m.position[2]}
+            r={revealed ? 0.9 : 0.75}
+            fill={revealed
+              ? `#${(SYSTEM_COLOR[m.system] ?? 0x888888).toString(16).padStart(6, "0")}`
+              : "var(--interactive)"}
+            stroke={revealed ? "var(--warning)" : "var(--background)"}
+            strokeWidth={revealed ? 0.4 : 0.3}
+          />
+        );
+      })}
 
       {position && Math.abs(position[1] - 1.7 - level * 4) < 2 && (
         <g>
