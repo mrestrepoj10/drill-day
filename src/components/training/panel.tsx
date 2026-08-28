@@ -54,6 +54,7 @@ export function TrainingPanel({
   onReplay,
   replaying,
   compactOpen,
+  challengeLabel,
 }: {
   session: TrainingSession;
   onPickRole: (role: string) => void;
@@ -63,6 +64,7 @@ export function TrainingPanel({
   onReplay: () => void;
   replaying: boolean;
   compactOpen: boolean;
+  challengeLabel: string;
 }) {
   const step = session.step;
   const mission = session.mission;
@@ -89,18 +91,12 @@ export function TrainingPanel({
       ) : (
         <>
           <header className="border-b border-border px-5 py-4">
-            <h1 className="text-balance text-[18px] font-semibold leading-[1.25] tracking-[-0.02em]">
+            <div className="text-[10px] font-semibold uppercase leading-[1.4] tracking-[0.12em] text-text-tertiary">
+              {challengeLabel}
+            </div>
+            <h1 className="mt-1.5 text-balance text-[18px] font-semibold leading-[1.25] tracking-[-0.02em]">
               {mission.title}
             </h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[1.4] text-muted-foreground">
-              <span className="flex items-center gap-1.5 text-success">
-                <span className="size-1.5 rounded-full bg-success" aria-hidden="true" /> Live · 07:42
-              </span>
-              <span>Northgate Data &amp; Logistics</span>
-              <span className="text-text-tertiary">
-                {mission.author === "agent" ? "Agent-authored" : "Built-in scenario"}
-              </span>
-            </div>
           </header>
 
           {step ? (

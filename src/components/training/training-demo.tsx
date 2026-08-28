@@ -466,6 +466,20 @@ export function TrainingDemo() {
   const destinationLabel = session.step?.validDestination?.room
     ? ROOMS.find((room) => room.id === session.step?.validDestination?.room)?.name
     : undefined;
+  const challengeIndex = session.mission?.author === "built-in"
+    ? ROLES.findIndex((role) => role.id === session.mission?.role)
+    : -1;
+  const challengeNumber = challengeIndex >= 0
+    ? String(challengeIndex + 1).padStart(2, "0")
+    : undefined;
+  const challengeContext = session.mission?.author === "agent"
+    ? "Custom challenge"
+    : challengeNumber
+      ? `Challenge ${challengeNumber}`
+      : "WebMCP challenge";
+  const challengeLabel = challengeNumber
+    ? `${challengeContext} of ${String(ROLES.length).padStart(2, "0")}`
+    : challengeContext;
 
   // The movement tutorial has done its job once the learner has actually
   // walked; from then on the bar carries only the objective.
@@ -496,7 +510,7 @@ export function TrainingDemo() {
   return (
     <div className="app-shell">
       <WorkspaceHeader
-        context={session.mission?.title ?? "WebMCP challenge"}
+        context={challengeContext}
         missionPaneOpen={missionPaneOpen}
         activityPaneOpen={activityPaneOpen}
         unseenActivity={unseen}
@@ -516,6 +530,7 @@ export function TrainingDemo() {
           sectionOn={sectionOn}
           replaying={replaying}
           compactOpen={missionPaneOpen}
+          challengeLabel={challengeLabel}
           onReplay={async () => {
             if (!training) return;
             setReplaying(true);

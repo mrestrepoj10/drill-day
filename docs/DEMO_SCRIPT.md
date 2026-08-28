@@ -4,7 +4,7 @@
 
 > Training from a manual tells you what a valve is. Drill Day puts you in the building at 07:42, with water coming through the ceiling, and asks you to make the safe call. The learner and ChatGPT share the same live Autodesk Scene API model.
 
-Show the launch screen, generated incident brief, three stages, mission-aware workspace header, Scene API badge, and 13-site-tool badge. Start the flagship drill.
+Show the launch screen, generated incident brief, three stages, challenge-aware workspace header, Scene API badge, and 13-site-tool badge. Start the flagship drill.
 
 ## 0:18–0:48 — situated navigation
 
