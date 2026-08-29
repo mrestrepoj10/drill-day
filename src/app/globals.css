@@ -399,6 +399,76 @@ a {
   }
 }
 
+/* Learning cues shimmer instead of boxing: the same soft breathing glow in the
+   plan as over the 3D elements, so both views speak one visual language. */
+@keyframes cue-shimmer {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.38;
+  }
+}
+
+.plan-cue {
+  animation: cue-shimmer 2.6s ease-in-out infinite;
+}
+
+.plan-cue-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cue-halo 2.6s ease-in-out infinite;
+}
+
+@keyframes cue-halo {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.15;
+    transform: scale(1.5);
+  }
+}
+
+/* The current-stage dot carries the same slow pulse, tying the panel to the
+   cues it is describing. */
+.stage-pulse {
+  transform-box: fill-box;
+  animation: stage-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes stage-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-cue,
+  .plan-cue-halo,
+  .stage-pulse {
+    animation: none;
+  }
+
+  .plan-cue {
+    opacity: 0.22;
+  }
+
+  .plan-cue-halo,
+  .stage-pulse {
+    opacity: 0;
+  }
+}
+
 /* Narrate-for-camera: the newest feed row holds a highlight long enough for a
    recorded viewer to catch each tool call as it lands. */
 @keyframes narrate-flash {

@@ -62,6 +62,17 @@ const TONE_COLOR: Record<HighlightTone, number> = {
   trace: 0x3f8ecb,
 }
 
+// Learning cues are a soft breathing glow, not a cage: a translucent shell a
+// little larger than the element, pulsing between CUE_MIN and CUE_MAX. The
+// shell is transparent, so the viewer's hit test passes straight through it
+// and the learner can still click the element being marked.
+const CUE_PAD = 0.34
+const CUE_MIN = 0.07
+const CUE_MAX = 0.3
+const CUE_REST = 0.18
+const CUE_PERIOD_MS = 2600
+const CUE_FRAME_MS = 33
+
 /**
  * Draws the building, and answers the four questions the training extension
  * asks of a host: light these up, ghost everything but these, where is this,
@@ -71,6 +82,9 @@ const TONE_COLOR: Record<HighlightTone, number> = {
 export class TrainingScene implements TrainingRenderer {
   private highlighted = new Map<string, HighlightTone>()
   private learningCues = new Set<string>()
+  private cuePhase = new Map<string, number>()
+  private cueFrame: number | null = null
+  private cueLastFrame = 0
   private selection: { id: string; tone: HighlightTone } | null = null
   private isolated: Set<string> | null = null
   private ceiling: string[] = []
@@ -623,38 +637,20 @@ export class TrainingScene implements TrainingRenderer {
     if (element) this.paint(element)
   }
 
-  private itemFor(element: TrainingElement): StageItemInit {
-    const tone = this.selection?.id === element.id
-      ? this.selection.tone
-      : this.highlighted.get(element.id)
-    const base = SYSTEM_COLOR[element.system] ?? 0x8b939d
-    const ghosted = this.isolated && !this.isolated.has(element.id)
-    // A highlighted element takes the tone colour itself. Nothing is drawn in
-    // front of it — the learner answers by clicking, and a solid halo would eat
-    // the pick ray before it ever reached the element being marked.
-    const color = tone ? TONE_COLOR[tone] : ghosted ? GHOST : base
+  /** The visual silhouette an element renders with, shared by the cue shell. */
+  private shapeFor(element: TrainingElement): {
+    geometry: string
+    size: Vec3
+    direction?: Vec3
+  } {
     const [sx, sy, sz] = element.size
 
     if (/valve|isolator/i.test(element.name)) {
-      return {
-        geometry: "sphere",
-        position: element.position,
-        size: [sx * 1.3, sy * 1.08, sz * 1.3],
-        color,
-        unlit: !!tone,
-        opacity: ghosted ? 0.3 : 1,
-      }
+      return { geometry: "sphere", size: [sx * 1.3, sy * 1.08, sz * 1.3] }
     }
 
     if (/extinguisher/i.test(element.name)) {
-      return {
-        geometry: "cylinder",
-        position: element.position,
-        size: [sx, sy, sz],
-        color,
-        unlit: !!tone,
-        opacity: ghosted ? 0.3 : 1,
-      }
+      return { geometry: "cylinder", size: [sx, sy, sz] }
     }
 
     // Pipework reads as pipework: anything long and thin becomes a cylinder
@@ -664,24 +660,32 @@ export class TrainingScene implements TrainingRenderer {
     const pipey = /riser|drop|main|header|branch/i.test(element.name) && longest > girth * 3
     if (pipey) {
       const direction: Vec3 = sy === longest ? [0, 1, 0] : sx === longest ? [1, 0, 0] : [0, 0, 1]
-      return {
-        geometry: "cylinder",
-        position: element.position,
-        size: [girth, longest, girth],
-        direction,
-        color,
-        // Marked elements are drawn unlit. Half of this building is inside a
-        // cupboard with no daylight, and a highlight that a shadow can swallow
-        // is not a highlight.
-        unlit: !!tone,
-        opacity: ghosted ? 0.3 : 1,
-      }
+      return { geometry: "cylinder", size: [girth, longest, girth], direction }
     }
 
+    return { geometry: "box", size: element.size }
+  }
+
+  private itemFor(element: TrainingElement): StageItemInit {
+    const tone = this.selection?.id === element.id
+      ? this.selection.tone
+      : this.highlighted.get(element.id)
+    const base = SYSTEM_COLOR[element.system] ?? 0x8b939d
+    const ghosted = this.isolated && !this.isolated.has(element.id)
+    // A highlighted element takes the tone colour itself. Nothing is drawn in
+    // front of it — the learner answers by clicking, and a solid halo would eat
+    // the pick ray before it ever reached the element being marked.
+    // Marked elements are drawn unlit. Half of this building is inside a
+    // cupboard with no daylight, and a highlight that a shadow can swallow
+    // is not a highlight.
+    const color = tone ? TONE_COLOR[tone] : ghosted ? GHOST : base
+    const shape = this.shapeFor(element)
+
     return {
-      geometry: "box",
+      geometry: shape.geometry,
       position: element.position,
-      size: element.size,
+      size: shape.size,
+      direction: shape.direction,
       color,
       unlit: !!tone,
       opacity: ghosted ? 0.3 : 1,
@@ -779,9 +783,7 @@ export class TrainingScene implements TrainingRenderer {
   private syncHighlights(): void {
     const stage = this.stage
     const wanted = new Set<string>()
-    const visible = new Map<string, HighlightTone>(
-      [...this.learningCues].map((id) => [id, "trace"]),
-    )
+    const visible = new Map<string, HighlightTone>()
     for (const [id, tone] of this.highlighted) visible.set(id, tone)
     if (this.selection) visible.set(this.selection.id, this.selection.tone)
     for (const [id, tone] of visible) {
@@ -809,7 +811,71 @@ export class TrainingScene implements TrainingRenderer {
         this.repaint(id.slice(3))
       }
     }
+    this.syncCueShimmer()
     stage.refresh()
+  }
+
+  private syncCueShimmer(): void {
+    const stage = this.stage
+    const wanted = new Set<string>()
+    let index = 0
+    for (const id of this.learningCues) {
+      const element = ELEMENT_BY_ID.get(id)
+      if (!element) continue
+      const key = `cue:${id}`
+      wanted.add(key)
+      if (!this.cuePhase.has(key)) this.cuePhase.set(key, index * 0.9)
+      index += 1
+      const shape = this.shapeFor(element)
+      stage.set(key, {
+        geometry: shape.geometry,
+        position: element.position,
+        size: [shape.size[0] + CUE_PAD, shape.size[1] + CUE_PAD, shape.size[2] + CUE_PAD],
+        direction: shape.direction,
+        color: TONE_COLOR.trace,
+        unlit: true,
+        opacity: CUE_REST,
+        throughWalls: true,
+        decorative: true,
+      })
+    }
+    for (const id of stage.ids()) {
+      if (id.startsWith("cue:") && !wanted.has(id)) {
+        stage.remove(id)
+        this.cuePhase.delete(id)
+      }
+    }
+    this.driveCueShimmer()
+  }
+
+  private driveCueShimmer(): void {
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    if (!this.cuePhase.size || reduced) {
+      if (this.cueFrame !== null) {
+        cancelAnimationFrame(this.cueFrame)
+        this.cueFrame = null
+      }
+      return
+    }
+    if (this.cueFrame !== null) return
+    const step = (now: number) => {
+      this.cueFrame = null
+      if (!this.cuePhase.size) return
+      if (now - this.cueLastFrame >= CUE_FRAME_MS) {
+        this.cueLastFrame = now
+        for (const [key, phase] of this.cuePhase) {
+          const wave = (Math.sin((now / CUE_PERIOD_MS) * Math.PI * 2 + phase) + 1) / 2
+          const eased = wave * wave * (3 - 2 * wave)
+          const opacity = Math.round((CUE_MIN + (CUE_MAX - CUE_MIN) * eased) * 50) / 50
+          this.stage.paint(key, { opacity })
+        }
+        this.stage.refresh()
+      }
+      this.cueFrame = requestAnimationFrame(step)
+    }
+    this.cueFrame = requestAnimationFrame(step)
   }
 
 }

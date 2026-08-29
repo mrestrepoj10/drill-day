@@ -57,8 +57,11 @@ export function MissionProgress({
                         : "text-text-tertiary",
                   )}
                 >
-                  {index + 1} of {stages.length} · {stage.label}
-                  {cleared ? <span className="sr-only">, complete</span> : null}
+                  {stage.label}
+                  <span className="sr-only">
+                    , step {index + 1} of {stages.length}
+                    {cleared ? ", complete" : ""}
+                  </span>
                 </div>
 
                 {current ? (
@@ -80,8 +83,8 @@ export function MissionProgress({
                     ) : null}
 
                     {session.step?.allowedTools ? (
-                      <div className="mt-3 flex items-center gap-2 text-[11px] leading-[1.4] text-warning">
-                        <ShieldAlert className="size-3.5 shrink-0" aria-hidden="true" />
+                      <div className="mt-3 flex items-center gap-2 text-[11px] leading-[1.4] text-muted-foreground">
+                        <ShieldAlert className="size-3.5 shrink-0 text-warning/80" aria-hidden="true" />
                         <span>Search is disabled for this stage</span>
                       </div>
                     ) : null}
@@ -124,6 +127,9 @@ function ProgressDot({
             : "border-border bg-muted/30 text-text-tertiary",
       )}
     >
+      {current ? (
+        <span className="stage-pulse absolute inset-0 rounded-full border border-foreground/40" />
+      ) : null}
       <span
         className={cn(
           "transition-[opacity,transform] duration-150 [transition-timing-function:var(--ease-out)]",

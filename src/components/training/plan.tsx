@@ -1,9 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ELEMENTS, FOOTPRINT, ROOMS, SYSTEM_COLOR } from "@/lib/training/facility";
 import type { Vec3 } from "@layer0/viewer-training";
 
 const PAD = 3;
+
+/** Trail points older than this stop being drawn; bands fade on the way out. */
+const TRAIL_TTL_MS = 45_000;
+const TRAIL_BANDS = [
+  { maxAge: 15_000, opacity: 0.8 },
+  { maxAge: 30_000, opacity: 0.45 },
+  { maxAge: TRAIL_TTL_MS, opacity: 0.18 },
+];
 
 /**
  * The related drawing.
@@ -37,8 +46,9 @@ export function FloorPlan({
   const rooms = ROOMS.filter((r) => r.level === level);
   const markedIds = new Set([...cueElements, ...highlighted]);
   const marks = ELEMENTS.filter((e) => e.level === level && markedIds.has(e.id));
-  const here = trail.filter(
-    (p) => Math.abs(p[1] - 1.7 - level * 4) < 2 && p[0] > -20 && p[0] < 70,
+  const { recent, now } = useRecentTrail(trail);
+  const here = recent.filter(
+    ({ point: p }) => Math.abs(p[1] - 1.7 - level * 4) < 2 && p[0] > -20 && p[0] < 70,
   );
 
   return (
@@ -64,12 +74,12 @@ export function FloorPlan({
             />
             {cueRooms.includes(r.id) ? (
               <rect
-                x={x0}
-                y={z0}
-                width={x1 - x0}
-                height={z1 - z0}
-                className="pointer-events-none fill-interactive/10 stroke-interactive"
-                strokeWidth={0.45}
+                x={x0 + 0.3}
+                y={z0 + 0.3}
+                width={x1 - x0 - 0.6}
+                height={z1 - z0 - 0.6}
+                rx={0.5}
+                className="plan-cue pointer-events-none fill-interactive"
               />
             ) : null}
             <text
@@ -86,30 +96,47 @@ export function FloorPlan({
         );
       })}
 
-      {here.length > 1 && (
-        <polyline
-          points={here.map((p) => `${p[0]},${p[2]}`).join(" ")}
-          fill="none"
-          stroke="var(--interactive)"
-          strokeWidth={0.35}
-          strokeOpacity={0.8}
-        />
+      {bandedTrail(here, now).map(({ opacity, points }, index) =>
+        points.length > 1 ? (
+          <polyline
+            key={index}
+            points={points.map((p) => `${p[0]},${p[2]}`).join(" ")}
+            fill="none"
+            stroke="var(--interactive)"
+            strokeWidth={0.35}
+            strokeOpacity={opacity}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : null,
       )}
 
       {marks.map((m) => {
         const revealed = highlighted.includes(m.id);
         return (
-          <circle
-            key={m.id}
-            cx={m.position[0]}
-            cy={m.position[2]}
-            r={revealed ? 0.9 : 0.75}
-            fill={revealed
-              ? `#${(SYSTEM_COLOR[m.system] ?? 0x888888).toString(16).padStart(6, "0")}`
-              : "var(--interactive)"}
-            stroke={revealed ? "var(--warning)" : "var(--background)"}
-            strokeWidth={revealed ? 0.4 : 0.3}
-          />
+          <g key={m.id}>
+            {!revealed ? (
+              <circle
+                cx={m.position[0]}
+                cy={m.position[2]}
+                r={1.5}
+                fill="none"
+                stroke="var(--interactive)"
+                strokeWidth={0.25}
+                className="plan-cue-halo"
+              />
+            ) : null}
+            <circle
+              cx={m.position[0]}
+              cy={m.position[2]}
+              r={revealed ? 0.9 : 0.75}
+              fill={revealed
+                ? `#${(SYSTEM_COLOR[m.system] ?? 0x888888).toString(16).padStart(6, "0")}`
+                : "var(--interactive)"}
+              stroke={revealed ? "var(--warning)" : "var(--background)"}
+              strokeWidth={revealed ? 0.4 : 0.3}
+            />
+          </g>
         );
       })}
 
@@ -121,6 +148,59 @@ export function FloorPlan({
       )}
     </svg>
   );
+}
+
+type StampedPoint = { point: Vec3; at: number };
+
+/**
+ * The route is working memory, not a record: each point is stamped when it
+ * first appears and dropped once it is old enough that "how did I get here"
+ * no longer needs it. The session keeps the full trail for the debrief.
+ */
+function useRecentTrail(trail: Vec3[]): { recent: StampedPoint[]; now: number } {
+  const [stamped, setStamped] = useState<StampedPoint[]>([]);
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const at = Date.now();
+      setNow(at);
+      setStamped((previous) => {
+        const base = trail.length < previous.length ? [] : previous;
+        return trail.map((point, index) => ({ point, at: base[index]?.at ?? at }));
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [trail]);
+
+  const aging = stamped.length > 0;
+  useEffect(() => {
+    if (!aging) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 3000);
+    return () => window.clearInterval(timer);
+  }, [aging]);
+
+  const cutoff = now - TRAIL_TTL_MS;
+  return { recent: stamped.filter((entry) => entry.at > cutoff), now };
+}
+
+/**
+ * Age falls monotonically along the trail, so the bands are contiguous runs
+ * and a handful of polylines draw the whole fade. Adjacent bands share their
+ * boundary point to keep the line unbroken.
+ */
+function bandedTrail(points: StampedPoint[], now: number): { opacity: number; points: Vec3[] }[] {
+  const bands = TRAIL_BANDS.map((band) => ({ opacity: band.opacity, points: [] as Vec3[] }));
+  let previousBand = -1;
+  for (const { point, at } of points) {
+    const age = now - at;
+    const index = TRAIL_BANDS.findIndex((band) => age <= band.maxAge);
+    const band = index === -1 ? TRAIL_BANDS.length - 1 : index;
+    if (previousBand !== -1 && previousBand !== band) bands[band].points.push(...bands[previousBand].points.slice(-1));
+    bands[band].points.push(point);
+    previousBand = band;
+  }
+  return bands;
 }
 
 function shortName(name: string): string {
