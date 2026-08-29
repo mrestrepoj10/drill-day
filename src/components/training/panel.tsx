@@ -14,6 +14,7 @@ import {
   ScanSearch,
   Timer,
 } from "lucide-react";
+import type { RegisteredTool } from "@layer0/webmcp";
 import {
   learningCueElements,
   learningCueRooms,
@@ -27,6 +28,8 @@ import {
   type MissionStageView,
 } from "@/components/training/mission-progress";
 import { FloorPlan } from "@/components/training/plan";
+import { SuggestedPrompt } from "@/components/training/suggested-prompt";
+import { ToolAccess } from "@/components/training/tool-access";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -62,6 +65,7 @@ export function TrainingPanel({
   challengeLabel,
   roleLabel,
   onLearningCues,
+  tools,
 }: {
   session: TrainingSession;
   onPickRole: (role: string) => void;
@@ -74,6 +78,8 @@ export function TrainingPanel({
   challengeLabel: string;
   roleLabel: string;
   onLearningCues: () => void;
+  /** Everything currently registered on `navigator.modelContext`. */
+  tools: RegisteredTool[];
 }) {
   const step = session.step;
   const mission = session.mission;
@@ -98,7 +104,7 @@ export function TrainingPanel({
       className="workspace-mission glass-panel scrollbar-thin flex h-full min-h-0 flex-col overflow-y-auto border-r border-border"
     >
       {!mission ? (
-        <MissionLaunch onPickRole={onPickRole} />
+        <MissionLaunch onPickRole={onPickRole} toolCount={tools.length} />
       ) : (
         <>
           <header className="border-b border-border px-5 py-4">
@@ -124,6 +130,7 @@ export function TrainingPanel({
                 onReplay={onReplay}
                 replaying={replaying}
               />
+              <ToolAccess tools={tools} session={session} />
             </>
           ) : (
             <MissionDebrief session={session} onReplay={onReplay} replaying={replaying} />
@@ -199,7 +206,13 @@ export function TrainingPanel({
   );
 }
 
-function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
+function MissionLaunch({
+  onPickRole,
+  toolCount,
+}: {
+  onPickRole: (role: string) => void;
+  toolCount: number;
+}) {
   const otherRoles = ROLES.filter((role) => role.id !== "technician");
   const [rolePickerOpen, setRolePickerOpen] = useState(false);
 
@@ -251,10 +264,25 @@ function MissionLaunch({ onPickRole }: { onPickRole: (role: string) => void }) {
           <ArrowRight className="workspace-action-arrow size-4" aria-hidden="true" />
         </Button>
 
-        <div className="mt-4 border-t border-border pt-4">
-          <p className="text-pretty text-[13px] leading-[1.5] text-muted-foreground">
-            <b className="text-foreground">WebMCP changes the lesson.</b> The agent can inspect the live model and guide without bypassing the exercise rules.
+        {/* The cold start: what to paste, and what the page will refuse to do
+            with it. A judge who reads nothing else should still get the idea. */}
+        <div className="mt-5 rounded-lg border border-border p-3.5">
+          <div className="flex items-center gap-2">
+            <Bot className="size-3.5 text-interactive" aria-hidden="true" />
+            <h2 className="text-[12px] font-semibold leading-[1.4]">Bring your agent</h2>
+            {toolCount ? (
+              <span className="ml-auto font-mono text-[11px] leading-[1.4] text-text-tertiary">
+                {toolCount} site tools
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-pretty text-[13px] leading-[1.5] text-muted-foreground">
+            It can read everything on this page except the answer. Each stage decides which
+            tools it may use, and the refusals are logged where you can see them.
           </p>
+          <div className="mt-3 border-t border-border pt-3">
+            <SuggestedPrompt />
+          </div>
         </div>
       </section>
 

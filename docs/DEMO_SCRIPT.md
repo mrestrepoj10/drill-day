@@ -1,37 +1,35 @@
-# Demo script — target 2:25
+# Demo script — target 2:40
 
-## 0:00–0:18 — premise
+One loop, three times, at rising stakes: **the agent acts → the page permits or refuses → the learner sees why.**
 
-> Training from a manual tells you what a valve is. Drill Day puts you in the building at 07:42, with water coming through the ceiling, and asks you to make the safe call. The learner and ChatGPT share the same live Autodesk Scene API model.
+Every other WebMCP app in the field sells shared state. This one sells the part nobody else has, so the refusal goes first — before the viewer knows what a fan coil is.
 
-Show the launch screen, generated incident brief, three stages, role-aware mission header, Scene API badge, and 13-site-tool badge. Start the flagship drill.
+## 0:00–0:35 — refused
 
-## 0:18–0:48 — situated navigation
+> It is 07:42 and water is coming through a ceiling tile in Room 214. I am the technician. ChatGPT is on the same page I am, with fifteen site tools. Watch what happens when I ask it to just show me where the room is.
 
-> The first task is spatial: find Room 214 on foot. The plan reports position, but it cannot teleport me. Level shortcuts, search, locate, and manual advance are disabled because wayfinding is the exercise.
+Open on the launch panel: incident brief, three stages, the copyable prompt, and the line that sets up everything — *it can read everything on this page except the answer*. Start the flagship drill, open **Tool access**, and point at the four tools this stage has switched off before anything is called. Then run **Prove the guardrail**: `training_locate_element` is refused in the log, with the reason, and so is `training_attempt` — this stage is asking the learner to walk, not to pick.
 
-Walk far enough to show the route updating in the default-open floor plan while the 3D scene stays uncluttered. Point out that Learning cues emphasizes the full set of relevant room signs in both views without identifying Room 214, then toggle the cues off and on to land the learner choice in the activity feed. The active stage still carries the instruction in one progress surface.
+## 0:35–1:20 — permitted
 
-## 0:48–1:15 — WebMCP and guardrails
+> Same agent, same session, and the toolset moves with the stage. It cannot locate the answer, but it can read where I am standing, inspect any component by name, and spend a hint.
 
-> ChatGPT can read the exact live session through WebMCP, including where I am, the active prompt, attempts, hints, and allowed tools. If it tries to locate the answer, the page refuses the call and records that guardrail. It can still inspect a named component or spend a hint.
+Walk west along the corridor. The floor plan tracks the route while the 3D scene stays clear. Show Learning cues giving every relevant room sign the same treatment without singling out 214, then toggle them off and on so the learner's own choice lands in the feed. Enter Room 214 and watch **Tool access** widen as the stage changes.
 
-Run **Prove the guardrail**. Keep the refusal and allowed read/hint calls visible in the unified log.
+## 1:20–2:05 — wrong, then right
 
-## 1:15–1:48 — diagnosis and teaching
+> Now the real question. The coil is soaked, but water runs downhill. And here is the part I have not seen anywhere else: the agent can answer the step itself, and it is marked by exactly the same rules I am.
 
-> Once inside Room 214, the scene opens the real diagnosis: the fan coil is wet, but water runs downhill. The leaking part is the split drop above it. Picking has screen-space tolerance for small services and still refuses targets hidden behind walls. A wrong-but-plausible valve gets a specific explanation, not a generic failure.
+Run **Agent takes the verdict**. The agent commits to a plausible wrong answer, gets the authored near-miss diagnosis back in the shared log under its own name, and pins a note onto the component in the scene explaining what it got wrong. Say the important part out loud: **the verdict is real, and it is not binding.** The step does not clear. A coach that could finish the drill for the learner would end the drill.
 
-Show how Learning cues gives the leak and its plausible near misses the same blue treatment in the plan and Scene API model without identifying the answer. Spend a hint to contrast its specific amber reveal, select the leak, and call out the new “Next move” directions to the riser cupboard. Choose the Room 214 terminal valve as a near miss, note that its feedback is labeled for the Isolate stage, click it again to clear the selection, then select the first-floor chilled-water isolation as the correct answer. Briefly show the completion debrief and its primary Replay action.
+Then make the call yourself: select the split drop, follow the inline directions to the riser cupboard, take the Room 214 terminal valve as a near miss, and finish on the first-floor chilled-water isolation. Show the debrief and its Replay action.
 
-## 1:48–2:10 — agent-authored training
+## 2:05–2:40 — authored, and close
 
-> The most ambitious part is that the agent can build the next drill. It browses the actual fire elements in this model, writes a mission from checked stable IDs, defines meaningful near misses, and launches it in the same scene. Hallucinated element IDs are rejected before the learner ever sees the exercise.
+> The last thing it can do is write the next drill. It browses the fire equipment that actually exists in this model, composes a mission from checked IDs, and launches it in the same scene. A hallucinated element id is rejected before a learner ever sees the exercise.
 
-Run **Agent-authored drill** and show its first prompt.
+Run **Agent-authored drill** and show its first prompt. Close on the activity feed.
 
-## 2:10–2:25 — close
+> One column. Every actor — me, the scene, the agent. Every permitted call, every refusal, every verdict, including the agent's own. Drill Day is a standalone Next.js app on Vercel, MIT-licensed, rendered with three.js, no server and no backend. Every WebMCP app asks what an agent can do on a page. This one asks what it should be stopped from doing, and makes the refusal part of the lesson.
 
-> Drill Day is a standalone Next.js 16 app, deployed on Vercel and open source under MIT. Autodesk provides the live scene; WebMCP gives the agent safe, visible agency inside it. The result is not a chatbot beside a model—it is a building that can teach back.
-
-End on the overview and repository/live-demo links.
+End on the overview with the repository and live-demo links.

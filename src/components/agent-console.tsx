@@ -8,8 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDot,
-  Clipboard,
-  ClipboardCheck,
   Footprints,
   Presentation,
   ShieldAlert,
@@ -20,6 +18,7 @@ import type { ModelContextFlavor, RegisteredTool, ToolCall } from "@layer0/webmc
 import type { Decision, TrainingSession } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, ROOMS } from "@/lib/training/facility";
 import { Button } from "@/components/ui/button";
+import { SuggestedPrompt } from "@/components/training/suggested-prompt";
 import {
   Collapsible,
   CollapsibleContent,
@@ -60,9 +59,6 @@ type TimelineEvent = {
   tone: "neutral" | "good" | "near" | "bad" | "agent";
   call?: ToolCall;
 };
-
-const SUGGESTED_PROMPT =
-  "Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.";
 
 export function AgentConsole({
   drills = [],
@@ -209,32 +205,6 @@ export function AgentConsole({
         </TabsContent>
       </Tabs>
     </aside>
-  );
-}
-
-function SuggestedPrompt() {
-  const [copied, setCopied] = useState(false);
-
-  const copyPrompt = async () => {
-    await navigator.clipboard.writeText(SUGGESTED_PROMPT);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  };
-
-  return (
-    <>
-      <p className="text-pretty text-[13px] leading-[1.5] text-foreground">{SUGGESTED_PROMPT}</p>
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        onClick={copyPrompt}
-        className="mt-2 -ml-2 text-interactive hover:text-foreground"
-      >
-        {copied ? <ClipboardCheck className="size-3" /> : <Clipboard className="size-3" />}
-        {copied ? "Copied" : "Copy prompt"}
-      </Button>
-    </>
   );
 }
 
@@ -552,6 +522,16 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
       tone: "neutral",
     };
   }
+  if (decision.kind === "annotate") {
+    return {
+      id: `decision-${decision.at}-${index}`,
+      at: decision.at,
+      actor: "ChatGPT",
+      title: `Pinned a note on ${element?.name ?? decision.element ?? "a component"}`,
+      detail: decision.note,
+      tone: "agent",
+    };
+  }
   if (decision.kind === "inspect") {
     return {
       id: `decision-${decision.at}-${index}`,
@@ -562,16 +542,21 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
     };
   }
   const verdict = decision.verdict;
+  // An answer the agent took a verdict on reads as its own act, not the
+  // learner's: the whole point is that both are marked by the same rules.
+  const byAgent = decision.by === "agent";
   return {
     id: `decision-${decision.at}-${index}`,
     at: decision.at,
-    actor: decision.kind === "blocked" ? "Guardrail" : "Learner",
+    actor: decision.kind === "blocked" ? "Guardrail" : byAgent ? "ChatGPT" : "Learner",
     title: element
-      ? `Selected ${element.name}`
+      ? `${byAgent ? "Answered" : "Selected"} ${element.name}`
       : decision.kind === "arrive"
         ? `Reached ${room?.name ?? "the destination"}`
         : verdict?.message ?? "Navigation event",
-    detail: verdict?.diagnosis ?? verdict?.message,
+    detail: byAgent && verdict
+      ? `${verdict.diagnosis ?? verdict.message} Not binding — the learner still makes the call.`
+      : verdict?.diagnosis ?? verdict?.message,
     tone: verdict?.kind === "correct" ? "good" : verdict?.kind === "near" ? "near" : verdict ? "bad" : "neutral",
   };
 }

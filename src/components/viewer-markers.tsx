@@ -21,7 +21,7 @@ const TONE: Record<NonNullable<Marker["tone"]>, string> = {
 /**
  * HTML labels pinned to world positions, via `impl.worldToClient`.
  *
- * The Scene API has no text primitive, and building glyph geometry to put a
+ * three.js has no text primitive, and building glyph geometry to put a
  * temperature over a cabinet would be a poor trade. Projecting the anchor point
  * each frame and letting the DOM draw the label keeps type crisp at any zoom
  * and keeps the labels themselves selectable, which matters more here than

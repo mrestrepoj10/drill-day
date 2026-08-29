@@ -10,6 +10,7 @@ import {
 } from "./evaluate"
 import { learningCueElements } from "./schema"
 import type {
+  Annotation,
   Decision,
   ElementRef,
   HighlightTone,
@@ -67,6 +68,15 @@ export interface ViewerTraining {
   clear(): void
 
   toggleSelection(id: ElementRef): SelectionResult
+  /**
+   * The agent answering the step itself. Marked by exactly the same rules as a
+   * learner's click, and deliberately not binding — see the implementation.
+   */
+  attempt(id: ElementRef): SelectionResult
+  /** Pins a note from the agent onto an element in the shared scene. */
+  annotate(id: ElementRef, note: string): Annotation
+  /** Removes every pinned note. Returns how many there were. */
+  clearAnnotations(): number
   nextHint(): Hint | undefined
   toggleLearningCues(): boolean
   advance(reason?: string): void
@@ -104,6 +114,7 @@ const EMPTY: TrainingSession = {
   progress: [],
   level: 0,
   coaching: [],
+  annotations: [],
   trail: [],
 }
 
@@ -223,6 +234,8 @@ class ViewerTrainingRuntime implements ViewerTraining {
         hintsUsed: 0,
         revealed: [],
         selection: next ? undefined : s.selection,
+        // Notes are coaching for the step that is open, not a running margin.
+        annotations: next ? [] : s.annotations,
       }
       this.stepOpenedAt = Date.now()
       if (reason) this.coach(reason, "app")
@@ -272,7 +285,7 @@ class ViewerTrainingRuntime implements ViewerTraining {
       }
       const progress = this.session.progress[this.session.stepIndex]
       if (progress) progress.attempts++
-      this.record({ kind: "select", element: id, verdict })
+      this.record({ kind: "select", by: "learner", element: id, verdict })
 
       this.renderer?.setSelection({
         id,
@@ -286,10 +299,72 @@ class ViewerTrainingRuntime implements ViewerTraining {
       return { action: "selected", message: verdict.message, verdict }
     }
 
+    /**
+     * The agent's own answer, marked by `evaluate.ts` — the same pure function,
+     * the same three verdicts, the same authored diagnosis a learner would get.
+     *
+     * It does not clear the step. An agent that could answer on the learner's
+     * behalf would be a solver, not a coach, and the drill would be over the
+     * moment it was asked nicely. So the mark is real and public — it lands in
+     * the feed under ChatGPT's name, near misses and all — and the learner
+     * still has to make the call. Learner attempt counts are untouched for the
+     * same reason: the debrief grades one person.
+     */
+    attempt(id: ElementRef): SelectionResult {
+      const step = this.session.step
+      if (this.session.status !== "running" || !step) {
+        return { action: "blocked", message: "No mission is running, so there is nothing to answer yet." }
+      }
+      if (step.mode !== "select") {
+        return {
+          action: "blocked",
+          message: "This step is a navigation objective — there is no component to answer with.",
+        }
+      }
+      const element = this.byId.get(id)
+      if (!element) {
+        return { action: "blocked", message: `There is no element "${id}" in this model.` }
+      }
+
+      const verdict = markSelection(step, id, this.byId)
+      this.record({ kind: "select", by: "agent", element: id, verdict })
+      this.renderer?.highlight([
+        {
+          ids: [id],
+          tone: verdict.kind === "correct" ? "good" : verdict.kind === "near" ? "near" : "bad",
+        },
+      ])
+      this.emit()
+      return { action: "selected", message: verdict.message, verdict }
+    }
+
+    annotate(id: ElementRef, note: string): Annotation {
+      const element = this.byId.get(id)
+      if (!element) throw new Error(`no element "${id}" in this model`)
+      const entry: Annotation = { id, note, at: Date.now() }
+      this.session = {
+        ...this.session,
+        // One note per element, newest last, and a ceiling so a chatty agent
+        // cannot bury the building it is annotating.
+        annotations: [...this.session.annotations.filter((a) => a.id !== id), entry].slice(-6),
+      }
+      this.record({ kind: "annotate", by: "agent", element: id, note })
+      this.emit()
+      return entry
+    }
+
+    clearAnnotations(): number {
+      const count = this.session.annotations.length
+      if (!count) return 0
+      this.session = { ...this.session, annotations: [] }
+      this.emit()
+      return count
+    }
+
     /** Called from the camera listener as the learner walks. */
     private sampleWalker(): void {
       // Orbit, camera fly-to, level previews, and replay all emit the same
-      // camera event as BimWalk. Only first-person training navigation is
+      // camera event as the walk rig. Only first-person training navigation is
       // allowed to mutate the learner's route or satisfy a reach step.
       if (!this.walking) return
       const p = this.handle.camera.position

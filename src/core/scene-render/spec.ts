@@ -1,6 +1,6 @@
 // The scene spec — "json-render for 3D".
 // A flat, declarative JSON document an agent (or a form) can emit,
-// rendered 1:1 onto Scene API instances. Stable `id`s are the contract
+// rendered 1:1 onto scene instances. Stable `id`s are the contract
 // that makes diffing, patching, and incremental re-render possible.
 
 export type Vec3 = [number, number, number]

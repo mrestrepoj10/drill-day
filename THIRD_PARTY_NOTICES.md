@@ -6,7 +6,7 @@ Drill Day is MIT-licensed project source. That license does not replace the lice
 
 Dependency versions are locked in `pnpm-lock.yaml`. `pnpm licenses list --prod` reports the production dependency graph under these licenses:
 
-- MIT: Next.js, React, React DOM, Babel packages, PostCSS, Browserslist packages, and related utilities.
+- MIT: Next.js, React, React DOM, three.js, Babel packages, PostCSS, Browserslist packages, and related utilities.
 - Apache-2.0: Sharp, SWC helpers, and related platform packages.
 - ISC: Lucide React, semver, and related utilities.
 - BSD-3-Clause: `source-map-js`.
@@ -20,9 +20,9 @@ Copyright and full license texts remain in each installed package. Run the comma
 
 The WebMCP API shape and terminology are based on the [W3C WebMCP specification](https://github.com/webmachinelearning/webmcp), available under the [W3C Software and Document License](https://github.com/webmachinelearning/webmcp/blob/main/LICENSE.md). Drill Day's implementation is independently authored project code.
 
-## Autodesk Platform Services Viewer
+## three.js
 
-The Autodesk Viewer runtime and stylesheet are loaded at runtime from Autodesk's official CDN. They are proprietary Autodesk software, are not vendored in this repository, and are not covered by Drill Day's MIT License. Use is subject to the [Autodesk Platform Services API Terms of Service](https://www.autodesk.com/company/legal-notices-trademarks/terms-of-service-autodesk360-web-services/forge-platform-web-services-api-terms-of-service/).
+3D rendering uses [three.js](https://threejs.org), available under the [MIT License](https://github.com/mrdoob/three.js/blob/dev/LICENSE), installed as a normal dependency and bundled with the app. Drill Day no longer loads any third-party viewer runtime from a CDN.
 
 ## Generated image
 

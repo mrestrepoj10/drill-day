@@ -18,29 +18,32 @@ The model marks deterministic answers. The agent explains why a near miss was re
 
 ## Why WebMCP matters here
 
-The page exposes 13 native site tools through `navigator.modelContext`. They operate on the exact scene and session the learner is viewing—no copied state and no separate backend.
+The page exposes 15 native site tools through `navigator.modelContext`. They operate on the exact scene and session the learner is viewing—no copied state and no separate backend.
 
 | Capability | Site tools |
 | --- | --- |
 | Read live context | `training_get_session`, `training_list_elements`, `training_inspect_element`, `training_trace_system` |
 | Ground the camera | `training_locate_element`, `training_set_view`, `training_cut_section` |
-| Teach in the moment | `training_give_hint`, `training_say`, `training_advance`, `training_replay` |
+| Teach in the moment | `training_give_hint`, `training_say`, `training_annotate`, `training_advance`, `training_replay` |
+| Answer and be marked | `training_attempt` |
 | Create training | `training_start_mission`, `training_author_mission` |
 
-Every tool has a constrained JSON Schema, a human-readable title and description, truthful read-only annotations, and an async executor. Mission-level allow lists enforce instructional guardrails. An agent can inspect a valve while being refused permission to locate it.
+Every tool has a constrained JSON Schema, a human-readable title and description, truthful read-only annotations, and an async executor. Mission-level allow lists enforce instructional guardrails, and the mission panel shows which half of the toolset the current stage leaves live before the agent tries it. An agent can inspect a valve while being refused permission to locate it.
+
+`training_attempt` is the other half of that idea: the agent can commit to an answer and take the same deterministic verdict a learner's click gets — including the authored near-miss diagnosis — recorded in the shared log under its own name. It is deliberately not binding. A coach that could clear the step on the learner's behalf would end the drill.
 
 If the browser does not yet implement WebMCP, a faithful same-document polyfill keeps the demo and manual tool console usable. It cannot provide out-of-page discovery; the UI says so explicitly.
 
 ## Scene and interaction
 
-- Autodesk Viewer 7 Scene API builds the model at runtime, so the demo needs no APS token or uploaded design file.
-- Stable training IDs stay separate from Scene API instance IDs.
+- A three.js viewport builds the model at runtime from the facility graph, so the demo needs no uploaded design file, token, or CAD pipeline.
+- Stable training IDs stay separate from render-instance IDs.
 - Exact hit testing is backed by a screen-space semantic fallback for small valves, with an occlusion guard to prevent through-wall answers.
-- Revealed labels are accessible buttons, while drag distance and pointer identity prevent BimWalk gestures from becoming accidental selections. Selection is singular and clicking the selected component again clears it.
+- Revealed labels and the agent's pinned notes are accessible DOM markers, while drag distance and pointer identity prevent first-person walk gestures from becoming accidental selections. Selection is singular and clicking the selected component again clears it.
 - The floor plan opens by default, keeps the walked route out of the 3D scene, and cannot teleport a learner past a navigation objective.
 - The activity log merges agent calls, learner selections and deselections, guardrails, coaching, and room-entry events.
 
-The incident briefing image was generated specifically for this project with GPT Image and used as visual art direction for the Scene API treatment: dark services, open ceiling grid, route markings, operational signage, leak context, and wet-floor details. See [asset provenance](public/media/README.md).
+The incident briefing image was generated specifically for this project with GPT Image and used as visual art direction for the scene treatment: dark services, open ceiling grid, route markings, operational signage, leak context, and wet-floor details. See [asset provenance](public/media/README.md).
 
 ## Run locally
 
@@ -59,7 +62,7 @@ Verify the release build:
 pnpm verify
 ```
 
-No environment variables, API keys, or Autodesk credentials are required.
+No environment variables or API keys are required.
 
 ## Architecture
 
@@ -67,18 +70,18 @@ No environment variables, API keys, or Autodesk credentials are required.
 src/
 ├── app/                         Next.js 16 App Router shell
 ├── components/training/         mission UI, scene, plan, flagship flow
-├── core/viewer/                 tokenless Autodesk Viewer bootstrap
-├── core/scene-render/           Scene API geometry, materials, picking
+├── core/viewer/                 three.js renderer, camera rig, walk mode
+├── core/scene-render/           shared unit geometry, materials, picking
 ├── core/viewer-training/        mission runtime and deterministic evaluator
 ├── core/webmcp/                 native registration, polyfill, call journal
 └── lib/training/                facility graph, missions, site tools
 ```
 
-The app is intentionally client-side and statically deployable. The Autodesk runtime is loaded from Autodesk's official Viewer CDN and is not included in this repository.
+The app is intentionally client-side and statically deployable. Rendering is plain three.js, bundled with the app; there is no viewer CDN, no server, and no database.
 
 ## Challenge development disclosure
 
-An earlier training proof of concept existed in the private/local `layer0` workspace. This repository is the standalone challenge release created after August 25, 2026. Challenge work includes the Next.js 16 extraction, reauthored product shell, generated visual brief, environmental Scene API pass, signage, unified activity log, WebMCP schema hardening and guardrails, selection tolerance, pointer safety, walk lifecycle fixes, responsive layout, documentation, and deployment packaging. Commit history in this repository provides the dated record.
+An earlier training proof of concept existed in the private/local `layer0` workspace. This repository is the standalone challenge release created after August 25, 2026. Challenge work includes the Next.js 16 extraction, reauthored product shell, generated visual brief, the three.js viewport and environmental pass, signage, unified activity log, WebMCP schema hardening and guardrails, selection tolerance, pointer safety, walk lifecycle fixes, responsive layout, documentation, and deployment packaging. Commit history in this repository provides the dated record.
 
 ## Contributing
 
@@ -86,4 +89,4 @@ Issues and pull requests are welcome. Please keep mission answers deterministic,
 
 ## License and third parties
 
-Project source is available under the [MIT License](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for dependency licenses, the WebMCP attribution, the Autodesk runtime exclusion, and generated-image provenance.
+Project source is available under the [MIT License](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for dependency licenses, the WebMCP and three.js attributions, and generated-image provenance.

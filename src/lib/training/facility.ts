@@ -3,7 +3,7 @@ import type { TrainingElement, TrainingRoom, Vec3 } from "@layer0/viewer-trainin
 // Northgate Data & Logistics — the building the lessons are set in.
 //
 // Two storeys on a 48 × 32 m footprint, a corridor spine on each level, and a
-// riser cupboard off it. Built with the Scene API because the page runs without
+// riser cupboard off it. Built as runtime geometry because the page runs without
 // credentials; the shape of the data is the shape a translated design gives you
 // — an id, a name, a room, a level, a bounding box, a property set, and, for
 // anything on a system, the element that feeds it.
@@ -241,7 +241,7 @@ export function slabs(): Slab[] {
 
 /**
  * The ramp up to level one, inside the stair core. A straight run rather than
- * a stair: BimWalk climbs a slope reliably on runtime geometry, and a flight of
+ * a stair: the walk rig climbs a slope reliably on runtime geometry, and a flight of
  * treads is a lot of instances for something you cross twice.
  */
 export const RAMP = {

@@ -1,4 +1,4 @@
-// @layer0/viewer-training — a scenario runtime for the APS Viewer.
+// @layer0/viewer-training — a scenario runtime for the three.js viewport.
 //
 // The idea: a model already knows where everything is and what feeds what, so
 // it can set an exercise and mark the answer. This package is the part that

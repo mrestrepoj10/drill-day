@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Drill Day
 
-Drill Day is our entry for the **WebMCP challenge**. It is a facilities-training demo where a learner and an AI agent share the same live 3D building: the page exposes 13 `training_*` site tools on `navigator.modelContext` following the **latest WebMCP draft spec** (https://webmachinelearning.github.io/webmcp/), so an agentic browser like ChatGPT can read the scene, coach the learner, and even author new drills — against the exact state the human is looking at.
+Drill Day is our entry for the **WebMCP challenge**. It is a facilities-training demo where a learner and an AI agent share the same live 3D building: the page exposes 15 `training_*` site tools on `navigator.modelContext` following the **latest WebMCP draft spec** (https://webmachinelearning.github.io/webmcp/), so an agentic browser like ChatGPT can read the scene, coach the learner, and even author new drills — against the exact state the human is looking at.
 
 The rest of this file is good defaults, not hard rules. The developer's instructions override anything here.
 
@@ -34,7 +34,7 @@ The rest of this file is good defaults, not hard rules. The developer's instruct
 
 ## How it works
 
-`src/core/webmcp` registers tools on `navigator.modelContext` and journals every call. `src/lib/training/tools.ts` declares the 13 tools (constrained JSON Schemas, truthful `readOnlyHint`s, mission-level allow lists). `@layer0/viewer-training` is the session engine — missions, verdicts, guardrails, replay. `@layer0/viewer` + `@layer0/scene-render` are a plain three.js viewport (renderer, camera rig with orbit/walk modes, on-demand render loop) and the stage of shared unit geometries drawn on it. React subscribes to the session via `useSyncExternalStore`; nothing owns state twice.
+`src/core/webmcp` registers tools on `navigator.modelContext` and journals every call. `src/lib/training/tools.ts` declares the 15 tools (constrained JSON Schemas, truthful `readOnlyHint`s, mission-level allow lists). `@layer0/viewer-training` is the session engine — missions, verdicts, guardrails, replay. `@layer0/viewer` + `@layer0/scene-render` are a plain three.js viewport (renderer, camera rig with orbit/walk modes, on-demand render loop) and the stage of shared unit geometries drawn on it. React subscribes to the session via `useSyncExternalStore`; nothing owns state twice.
 
 ## Where code lives
 

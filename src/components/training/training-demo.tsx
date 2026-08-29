@@ -46,6 +46,7 @@ const IDLE: TrainingSession = {
   progress: [],
   level: 0,
   coaching: [],
+  annotations: [],
   trail: [],
 };
 
@@ -64,8 +65,27 @@ const DRILLS: Drill[] = [
     hint: "A forbidden locate call is refused, while inspection and hints remain available.",
     steps: [
       { tool: "training_locate_element", input: { id: "CHW-VLV-L1" }, pause: 500 },
+      { tool: "training_attempt", input: { id: "CHW-VLV-L1" }, pause: 500 },
       { tool: "training_inspect_element", input: { id: "CHW-DROP-214" }, pause: 500 },
       { tool: "training_give_hint" },
+    ],
+  },
+  {
+    label: "Agent takes the verdict",
+    hint: "The agent answers the step itself and is marked by the same rules the learner is.",
+    // Deliberately does not load a mission: it answers whatever step is open,
+    // so it lands inside the flagship drill rather than interrupting it.
+    steps: [
+      { tool: "training_attempt", input: { id: "CHW-FCU-214" }, pause: 1100 },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-FCU-214",
+          note: "I picked this and was marked down: the coil is wet, but water runs downhill. Look above it.",
+        },
+        pause: 900,
+      },
+      { tool: "training_get_session" },
     ],
   },
   {
@@ -131,7 +151,7 @@ export function TrainingDemo() {
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
   const modelContext = useModelContext();
-  const { calls } = modelContext;
+  const { calls, tools } = modelContext;
 
   const { getStage, status, error } = useStage(containerRef, (stage, handle) => {
     const scene = new TrainingScene(stage);
@@ -220,6 +240,8 @@ export function TrainingDemo() {
     const fresh = session.decisions.slice(pushedDecisions.current);
     pushedDecisions.current = session.decisions.length;
     for (const decision of fresh) {
+      // The agent does not need to be told what the agent just did.
+      if (decision.by === "agent") continue;
       const room = decision.room
         ? ROOMS.find((item) => item.id === decision.room)?.name ?? decision.room
         : undefined;
@@ -238,6 +260,22 @@ export function TrainingDemo() {
       if (line) pushAmbientContext(`Drill Day update: ${line} Call training_get_session for detail.`);
     }
   }, [session.decisions]);
+
+  // The tool access panel tells the learner which half of the toolset is live.
+  // This tells the agent the same thing, unprompted, as the step changes — so
+  // it can plan around a refusal instead of discovering it.
+  const stepId = session.step?.id;
+  useEffect(() => {
+    if (!stepId) return;
+    const allowed = session.step?.allowedTools;
+    pushAmbientContext(
+      allowed
+        ? `Drill Day: a new stage is open and it restricts your tools. Allowed here: ${allowed.join(", ")}. Anything else will be refused.`
+        : "Drill Day: a new stage is open, with every site tool available.",
+    );
+    // Only the step identity should re-announce; the step object is stable per step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -423,24 +461,46 @@ export function TrainingDemo() {
     const ids = new Set<string>();
     for (const hint of session.revealed) for (const id of hint.reveals ?? []) ids.add(id);
     if (session.selection?.element) ids.add(session.selection.element);
+    // A pinned note puts the agent's sentence on the thing it is about, rather
+    // than in a panel the learner has to look away from.
+    const notes = new Map(session.annotations.map((note) => [note.id, note.note]));
+    for (const id of notes.keys()) ids.add(id);
     return [...ids].flatMap((id) => {
       const element = ELEMENT_BY_ID.get(id);
       if (!element) return [];
       const verdict = session.selection?.element === id ? session.selection.verdict?.kind : undefined;
+      const note = notes.get(id);
       return [{
         id,
         point: element.position as [number, number, number],
-        tone: verdict === "correct" ? "cool" : verdict === "near" ? "warm" : verdict ? "alert" : "neutral",
+        tone: verdict === "correct" ? "cool" : verdict === "near" ? "warm" : verdict ? "alert" : note ? "cool" : "neutral",
         onSelect: session.status !== "running" || session.step?.mode === "select"
           ? () => {
               if (!training) return;
               showSelectionResult(training.toggleSelection(id));
             }
           : undefined,
-        children: <b>{element.name}</b>,
+        children: note ? (
+          <>
+            <b className="block">{element.name}</b>
+            <span className="mt-0.5 block max-w-52 text-pretty text-[11px] font-normal leading-[1.45] opacity-90">
+              {note}
+            </span>
+          </>
+        ) : (
+          <b>{element.name}</b>
+        ),
       } satisfies Marker];
     });
-  }, [session.revealed, session.selection, session.status, session.step?.mode, showSelectionResult, training]);
+  }, [
+    session.annotations,
+    session.revealed,
+    session.selection,
+    session.status,
+    session.step?.mode,
+    showSelectionResult,
+    training,
+  ]);
 
   const roomSigns = useMemo<Marker[]>(() => {
     if (!session.mission || session.level !== 1) return [];
@@ -527,6 +587,7 @@ export function TrainingDemo() {
 
       <main id="training-workspace" className="workspace-grid">
         <TrainingPanel
+          tools={tools}
           session={session}
           onPickRole={pickRole}
           onHint={() => training?.nextHint()}

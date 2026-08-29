@@ -38,6 +38,10 @@ const NO_SEARCH = [
   "training_give_hint",
   "training_say",
   "training_cut_section",
+  // Answering and annotating stay on: taking a verdict in public and writing a
+  // sentence onto a visible component are not ways round the exercise.
+  "training_attempt",
+  "training_annotate",
 ]
 
 const at = (id: string): Vec3 => ELEMENT_BY_ID.get(id)?.position ?? [24, 0, 16]

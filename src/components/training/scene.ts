@@ -1108,7 +1108,7 @@ export class TrainingScene implements TrainingRenderer {
   // --- picking --------------------------------------------------------------
 
   /**
-   * Screen point → catalogue element. Exact Scene API hits win; small controls
+   * Screen point → catalogue element. Exact geometry hits win; small controls
    * then get a screen-space tolerance while the Stage occlusion guard prevents
    * selecting through opaque context geometry.
    */
