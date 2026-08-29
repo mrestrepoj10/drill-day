@@ -472,12 +472,20 @@ export const ELEMENTS: TrainingElement[] = [
 
 export const ELEMENT_BY_ID = new Map(ELEMENTS.map((e) => [e.id, e]))
 
-/** Colour per system, so the model reads as disciplines rather than shapes. */
+/**
+ * Colour per system, so the model reads as disciplines rather than shapes.
+ *
+ * Hexes sit as close to the real identification standards as a screen allows:
+ * BS 1710 auxiliary blue for chilled water, crimson 04-D-45 for LTHW, safety
+ * red 04-E-53 for fire, exit green for egress. Mains pipework is drawn as
+ * silver insulation and carries these as ID bands — reading the band is the
+ * same skill the building teaches in real life.
+ */
 export const SYSTEM_COLOR: Record<string, number> = {
-  "chilled water": 0x3f8ecb,
-  heating: 0xc9603c,
-  fire: 0xcc3a35,
-  egress: 0x3f9e6b,
+  "chilled water": 0x1e6aa8,
+  heating: 0x9b2d30,
+  fire: 0xc8102e,
+  egress: 0x009639,
   electrical: 0xd8a63a,
   air: 0x7d6ec9,
   logistics: 0x808a97,

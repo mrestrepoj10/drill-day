@@ -2,15 +2,19 @@ import {
   Stage,
   aFrameSignParts,
   ahuTrimParts,
+  callPointParts,
   defineFacilityAssetGeometry,
+  extinguisherTrimParts,
   fcuTrimParts,
   ladderTrayParts,
   placeDecorativeAsset,
+  pumpTrimParts,
   roomPlaqueParts,
   serverRackParts,
   shade,
   switchboardParts,
   valveTrimParts,
+  vesselParts,
   type StageItemInit,
   type Vec3,
 } from "@layer0/scene-render"
@@ -39,9 +43,14 @@ const TBAR = 0x7e8589
 const LUMINAIRE = 0xf7f9fb
 const LEAF = 0x3d4347
 const FRAME_ = 0x262b2e
-const EXIT_SIGN = 0x2f8f5b
+const EXIT_SIGN = 0x009639
 const HAZARD_YELLOW = 0xe4ae32
 const WATER = 0x4d9ab5
+/** Foil-faced pipe insulation — what a mains run actually looks like. */
+const INSULATION = 0xbfc3c6
+/** Galvanised sheet metal for ductwork and containment. */
+const GALVANISED = 0xb9bdbf
+const SAFETY_RED = 0xc8102e
 const FURNITURE: Record<string, number> = {
   desk: 0xc0a67f,
   chair: 0x5a6674,
@@ -108,12 +117,13 @@ export class TrainingScene implements TrainingRenderer {
     })
 
     for (const piece of walls()) {
+      // Opaque: a wall that a hover ray passes through reads as a rendering
+      // fault, and X-ray hover names equipment three rooms away.
       stage.set(`wall:${piece.id}`, {
         geometry: "box",
         position: piece.position,
         size: piece.size,
         color: FABRIC,
-        opacity: 0.96,
         decorative: true,
       })
     }
@@ -298,6 +308,9 @@ export class TrainingScene implements TrainingRenderer {
       // own, and a lid on a 3 m closet turns the one place the lesson happens
       // into a black box.
       if (w < 4 || d < 4) continue
+      // Plant spaces run exposed-soffit, like the real thing — services on
+      // show is the point of the room.
+      if (room.id === "PLANT-L0" || room.id === "AHU-L1") continue
 
       stage.defineGeometry(`grid:${room.id}`, tbarMesh(w, d))
       this.ceiling.push(`tbar:${room.id}`)
@@ -611,6 +624,322 @@ export class TrainingScene implements TrainingRenderer {
         parts: valveTrimParts(element.size, SYSTEM_COLOR[element.system] ?? 0x7b858b),
       })
     }
+
+    this.buildPipeIdBands()
+    this.buildLifeSafetyDetails()
+    this.buildPlantRoomDetails()
+  }
+
+  /**
+   * BS 1710 identification bands: mains runs are silver insulation, and every
+   * few metres a band names the service in its system colour. Reading the band
+   * — not the pipe — is how the real building is labelled, so it is how this
+   * one teaches.
+   */
+  private buildPipeIdBands(): void {
+    for (const element of ELEMENTS) {
+      const [sx, sy, sz] = element.size
+      const longest = Math.max(sx, sy, sz)
+      const girth = Math.min(sx, sy, sz)
+      const pipey = /riser|drop|main|header|branch/i.test(element.name) && longest > girth * 3
+      if (!pipey) continue
+      const axis: Vec3 = sy === longest ? [0, 1, 0] : sx === longest ? [1, 0, 0] : [0, 0, 1]
+      const color = SYSTEM_COLOR[element.system] ?? 0x8b939d
+      const bands = Math.min(6, Math.max(2, Math.floor(longest / 5)))
+      const step = longest / (bands + 1)
+      const parts = []
+      for (let n = 1; n <= bands; n++) {
+        const t = -longest / 2 + n * step
+        parts.push({
+          key: `band-${n}`,
+          geometry: "cylinder" as const,
+          offset: [axis[0] * t, axis[1] * t, axis[2] * t] as Vec3,
+          size: [girth * 1.12, 0.16, girth * 1.12] as Vec3,
+          direction: axis,
+          color,
+          unlit: true,
+        })
+      }
+      placeDecorativeAsset(this.stage, {
+        id: `detail:pipe-id:${element.id}`,
+        position: element.position,
+        parts,
+      })
+    }
+  }
+
+  /**
+   * BS EN 3 / BS 5306-8 dressing: extinguishers get their agent band, bracket
+   * and (for CO2) horn; every exit door gets a manual call point at 1.4 m.
+   */
+  private buildLifeSafetyDetails(): void {
+    for (const element of ELEMENTS) {
+      if (!/extinguisher/i.test(element.name)) continue
+      const type = typeof element.props?.type === "string" ? element.props.type : undefined
+      placeDecorativeAsset(this.stage, {
+        id: `detail:ext:${element.id}`,
+        position: element.position,
+        parts: extinguisherTrimParts(element.size, type, -1),
+      })
+    }
+
+    // Call points: beside the west final exit, the stair core doors, and the
+    // plant room door — the places a real fire strategy drawing puts them.
+    const callPoints: [string, Vec3, 1 | -1][] = [
+      ["exit-west", [1.2, 1.4, 15], -1],
+      ["core-l0", [39.4, 1.4, 21.35], 1],
+      ["core-l1", [39.4, STOREY + 1.4, 21.35], 1],
+      ["plant", [8.1, 1.4, 14.05], 1],
+    ]
+    for (const [key, position, wall] of callPoints) {
+      placeDecorativeAsset(this.stage, {
+        id: `detail:callpoint:${key}`,
+        position,
+        parts: callPointParts(wall),
+      })
+    }
+
+    // Sprinkler mains: a red pipe down each corridor void with pendent drops
+    // at tile-module intervals. Painted safety red end to end, as the one
+    // service that is never insulated.
+    for (const level of [0, 1]) {
+      const y = level * STOREY + CEILING + 0.42
+      this.stage.set(`detail:sprinkler:run:${level}`, {
+        geometry: "cylinder",
+        position: [24, y, 16.9],
+        size: [0.09, 44, 0.09],
+        direction: [1, 0, 0],
+        color: SAFETY_RED,
+        decorative: true,
+      })
+      for (let x = 4; x <= 44; x += 4.8) {
+        this.stage.set(`detail:sprinkler:drop:${level}:${x}`, {
+          geometry: "cylinder",
+          position: [x, level * STOREY + CEILING + 0.2, 16.9],
+          size: [0.035, 0.44, 0.035],
+          color: SAFETY_RED,
+          decorative: true,
+        })
+        this.stage.set(`detail:sprinkler:head:${level}:${x}`, {
+          geometry: "sphere",
+          position: [x, level * STOREY + CEILING - 0.04, 16.9],
+          size: [0.09, 0.07, 0.09],
+          color: 0xd8b25a,
+          metal: true,
+          decorative: true,
+        })
+      }
+    }
+  }
+
+  /**
+   * The plant room composed the way a real one is: housekeeping pads under
+   * floor-mounted plant, a duty/standby pump pair on inertia bases, the red
+   * expansion vessel and silver buffer vessel everyone recognises, and a
+   * painted floor.
+   */
+  private buildPlantRoomDetails(): void {
+    const stage = this.stage
+
+    // Painted plant floors: ground plant room and the L1 AHU room.
+    for (const [key, level] of [["plant", 0], ["ahu", 1]] as const) {
+      stage.set(`detail:plantfloor:${key}`, {
+        geometry: "box",
+        position: [7, level * STOREY + 0.012, 7],
+        size: [11.8, 0.024, 11.8],
+        color: 0x5c6660,
+        decorative: true,
+      })
+    }
+
+    // Housekeeping pads, 150 mm proud of each footprint.
+    const pads: [string, string][] = [
+      ["CHW-CH-01", "chiller"],
+      ["HTG-BLR-01", "boiler"],
+      ["CHW-PMP-01", "pump"],
+    ]
+    for (const [id, key] of pads) {
+      const element = ELEMENT_BY_ID.get(id)
+      if (!element) continue
+      const [sx, , sz] = element.size
+      const floorY = element.position[1] - element.size[1] / 2
+      stage.set(`detail:pad:${key}`, {
+        geometry: "box",
+        position: [element.position[0], floorY + 0.05, element.position[2]],
+        size: [sx + 0.3, 0.1, sz + 0.3],
+        color: 0xb8b8b8,
+        decorative: true,
+      })
+    }
+
+    // The duty pump's mechanical dressing, and a standby twin beside it —
+    // pumps come in pairs, and the pair is what makes the room read as real.
+    const pump = ELEMENT_BY_ID.get("CHW-PMP-01")
+    if (pump) {
+      placeDecorativeAsset(stage, {
+        id: "detail:pump:duty",
+        position: pump.position,
+        parts: pumpTrimParts(pump.size),
+      })
+      const standby: Vec3 = [pump.position[0], pump.position[1], pump.position[2] + 1.8]
+      placeDecorativeAsset(stage, {
+        id: "detail:pump:standby",
+        position: standby,
+        parts: [
+          ...pumpTrimParts(pump.size),
+          {
+            key: "body",
+            geometry: "box",
+            offset: [0, 0.05, 0],
+            size: [pump.size[0], pump.size[1] * 0.8, pump.size[2] * 0.8],
+            color: 0x4a5158,
+            metal: true,
+          },
+        ],
+      })
+    }
+
+    // Vessels along the south wall: LTHW expansion (red) and CHW buffer
+    // (insulated silver).
+    placeDecorativeAsset(stage, {
+      id: "detail:vessel:expansion",
+      position: [7.3, 0, 11.2],
+      parts: vesselParts({ diameter: 0.6, height: 1.2, color: 0xb03a2e }),
+    })
+    placeDecorativeAsset(stage, {
+      id: "detail:vessel:buffer",
+      position: [9.4, 0, 11],
+      parts: vesselParts({ diameter: 0.85, height: 1.8, color: INSULATION }),
+    })
+
+    // Boiler flue rising to the roof of the room.
+    stage.set("detail:boiler:flue", {
+      geometry: "cylinder",
+      position: [4.5, 2.9, 10.5],
+      size: [0.2, 1.9, 0.2],
+      color: GALVANISED,
+      metal: true,
+      decorative: true,
+    })
+
+    // The chilled-water circuit as continuous pipework. The catalogue's
+    // answerable elements sit *in* this run; without it the main valve floats
+    // in mid-air, which is the single loudest tell that a model is fake.
+    const runs: [string, Vec3, number, Vec3][] = [
+      // suction: chiller east face to the pump
+      ["suction", [7.4, 1.1, 5], 2.7, [1, 0, 0]],
+      // pump discharge heading for the valve group
+      ["disch-z", [9.3, 1.5, 6.6], 2.9, [0, 0, 1]],
+      ["disch-x", [10.9, 1.5, 8], 3.4, [1, 0, 0]],
+      // elbow up into the void and away to the corridor header
+      ["rise", [12.5, 2.45, 8], 2, [0, 1, 0]],
+      ["void-z", [12.5, 3.4, 12], 8.2, [0, 0, 1]],
+    ]
+    for (const [key, position, length, direction] of runs) {
+      stage.set(`detail:chw-run:${key}`, {
+        geometry: "cylinder",
+        position,
+        size: [0.18, length, 0.18],
+        direction,
+        color: INSULATION,
+        metal: true,
+        decorative: true,
+      })
+    }
+    for (const [key, position] of [
+      ["a", [9.3, 1.5, 5.2]],
+      ["b", [9.3, 1.5, 8]],
+      ["c", [12.5, 1.5, 8]],
+      ["d", [12.5, 3.4, 8]],
+    ] as [string, Vec3][]) {
+      stage.set(`detail:chw-elbow:${key}`, {
+        geometry: "sphere",
+        position,
+        size: [0.22, 0.22, 0.22],
+        color: INSULATION,
+        metal: true,
+        decorative: true,
+      })
+    }
+
+    // Chiller dressing: panel seams and a louvred condenser end.
+    const chiller = ELEMENT_BY_ID.get("CHW-CH-01")
+    if (chiller) {
+      placeDecorativeAsset(stage, {
+        id: "detail:equipment:CHW-CH-01",
+        position: chiller.position,
+        parts: [
+          {
+            key: "seams",
+            geometry: "boxEdges",
+            offset: [0, 0, 0],
+            size: [chiller.size[0] + 0.03, chiller.size[1] + 0.03, chiller.size[2] + 0.03],
+            color: 0x444b50,
+            lines: true,
+          },
+          {
+            key: "louvres",
+            geometry: "asset:grille",
+            offset: [-chiller.size[0] / 2 - 0.03, 0.1, 0],
+            size: [chiller.size[2] * 0.86, chiller.size[1] * 0.7, 1],
+            rotationY: Math.PI / 2,
+            color: 0x2c3236,
+            lines: true,
+          },
+          // Manufacturer accent stripe in the system colour — identity without
+          // painting the whole cabinet.
+          {
+            key: "accent",
+            geometry: "box",
+            offset: [0, -chiller.size[1] * 0.32, 0],
+            size: [chiller.size[0] + 0.04, 0.22, chiller.size[2] + 0.04],
+            color: SYSTEM_COLOR["chilled water"],
+            unlit: true,
+          },
+        ],
+      })
+    }
+
+    const boiler = ELEMENT_BY_ID.get("HTG-BLR-01")
+    if (boiler) {
+      placeDecorativeAsset(stage, {
+        id: "detail:equipment:HTG-BLR-01",
+        position: boiler.position,
+        parts: [
+          {
+            key: "seams",
+            geometry: "boxEdges",
+            offset: [0, 0, 0],
+            size: [boiler.size[0] + 0.03, boiler.size[1] + 0.03, boiler.size[2] + 0.03],
+            color: 0x50565a,
+            lines: true,
+          },
+          {
+            key: "accent",
+            geometry: "box",
+            offset: [0, -boiler.size[1] * 0.34, 0],
+            size: [boiler.size[0] + 0.04, 0.18, boiler.size[2] + 0.04],
+            color: SYSTEM_COLOR.heating,
+            unlit: true,
+          },
+        ],
+      })
+    }
+
+    // Plant rooms have batten luminaires, not ceiling tiles — without them the
+    // room is a cave and every colour cue below dies in shadow.
+    for (const [key, level] of [["plant", 0], ["ahu", 1]] as const) {
+      for (const z of [4, 9]) {
+        stage.set(`detail:plantlight:${key}:${z}`, {
+          geometry: "box",
+          position: [7, level * STOREY + 3.55, z],
+          size: [8, 0.06, 0.18],
+          color: LUMINAIRE,
+          unlit: true,
+          decorative: true,
+        })
+      }
+    }
   }
 
   /** One instance per catalogue element, shaped by what it is. */
@@ -637,7 +966,7 @@ export class TrainingScene implements TrainingRenderer {
 
     if (/valve|isolator/i.test(element.name)) {
       return {
-        geometry: "sphere",
+        geometry: "valve",
         position: element.position,
         size: [sx * 1.3, sy * 1.08, sz * 1.3],
         color,
@@ -647,18 +976,22 @@ export class TrainingScene implements TrainingRenderer {
     }
 
     if (/extinguisher/i.test(element.name)) {
+      // BS EN 3: the body is safety red regardless of agent; the agent is the
+      // shoulder band the trim adds. Verdict tones still take the whole body.
       return {
-        geometry: "cylinder",
+        geometry: "extinguisher",
         position: element.position,
         size: [sx, sy, sz],
-        color,
+        color: tone ? color : ghosted ? GHOST : SAFETY_RED,
         unlit: !!tone,
         opacity: ghosted ? 0.3 : 1,
       }
     }
 
     // Pipework reads as pipework: anything long and thin becomes a cylinder
-    // aimed down its long axis.
+    // aimed down its long axis — and a mains run wears foil-faced insulation,
+    // not discipline paint. The discipline lives in the ID bands the trim
+    // paints on, which is how BS 1710 labels the real thing.
     const longest = Math.max(sx, sy, sz)
     const girth = Math.min(sx, sy, sz)
     const pipey = /riser|drop|main|header|branch/i.test(element.name) && longest > girth * 3
@@ -669,7 +1002,8 @@ export class TrainingScene implements TrainingRenderer {
         position: element.position,
         size: [girth, longest, girth],
         direction,
-        color,
+        color: tone ? color : ghosted ? GHOST : INSULATION,
+        metal: !tone && !ghosted,
         // Marked elements are drawn unlit. Half of this building is inside a
         // cupboard with no daylight, and a highlight that a shadow can swallow
         // is not a highlight.
@@ -678,11 +1012,31 @@ export class TrainingScene implements TrainingRenderer {
       }
     }
 
+    // Ductwork is galvanised sheet, and packaged plant wears factory casing —
+    // pale panels, never discipline paint. The discipline lives in the pipes,
+    // bands and accents around it, which is how the real kit is labelled.
+    const ducty = /duct/i.test(element.name)
+    const casing = /chiller/i.test(element.name)
+      ? 0xdcdcd8
+      : /boiler/i.test(element.name)
+        ? 0xe9e7e2
+        : /AHU/i.test(element.name)
+          ? 0xd9d9d6
+          : /fan coil|CRAC|VAV|UPS/i.test(element.name)
+            ? 0xcfd3d5
+            : /pump/i.test(element.name)
+              ? 0x3a5a40
+              : /pallet/i.test(element.name)
+                ? 0xbb9a6b
+                : /door|final exit/i.test(element.name)
+                  ? LEAF
+                  : undefined
     return {
       geometry: "box",
       position: element.position,
       size: element.size,
-      color,
+      color: tone ? color : ghosted ? GHOST : ducty ? GALVANISED : casing ?? base,
+      metal: ducty && !tone && !ghosted,
       unlit: !!tone,
       opacity: ghosted ? 0.3 : 1,
     }
@@ -765,11 +1119,18 @@ export class TrainingScene implements TrainingRenderer {
       if (context.level !== undefined && element.level !== context.level) return false
       return !context.room || element.room === context.room
     }).map((element) => `el:${element.id}`)
+    // Anything the scene is currently marking through walls is answerable
+    // through them too.
+    const xray = new Set<string>()
+    for (const id of this.highlighted.keys()) xray.add(`el:${id}`)
+    for (const id of this.learningCues) xray.add(`el:${id}`)
+    if (this.selection) xray.add(`el:${this.selection.id}`)
     const snapped = this.stage.pickNearest(
       clientX,
       clientY,
       candidates,
       context.tolerancePx ?? 20,
+      xray,
     )
     return snapped?.id.startsWith("el:")
       ? ELEMENT_BY_ID.get(snapped.id.slice(3))
@@ -790,18 +1151,24 @@ export class TrainingScene implements TrainingRenderer {
       this.repaint(id)
       const key = `hl:${id}`
       wanted.add(key)
-      const pad = 0.5
-      // A wireframe cage, drawn through whatever is in front of it. Lines carry
-      // no triangles, so this stays out of the way of hit testing.
+      // Corner brackets, not a cage: a full wireframe cube reads as a debug
+      // bounding box; a viewfinder reads as intent. Padding is proportional so
+      // the marker hugs a valve as closely as it hugs an AHU, and the lines
+      // still draw through fabric — spotting a cue through a wall is part of
+      // the coaching. Line-only geometry stays out of hit testing.
+      const pad = (d: number) => d + Math.max(0.12, d * 0.16)
+      const size: Vec3 = [pad(element.size[0]), pad(element.size[1]), pad(element.size[2])]
+      const fresh = !stage.has(key)
       stage.set(key, {
-        geometry: "boxEdges",
+        geometry: "boxCorners",
         position: element.position,
-        size: [element.size[0] + pad, element.size[1] + pad, element.size[2] + pad],
+        size,
         color: TONE_COLOR[tone],
         lines: true,
         throughWalls: true,
         decorative: true,
       })
+      if (fresh) this.popIn(key, size)
     }
     for (const id of stage.ids()) {
       if (id.startsWith("hl:") && !wanted.has(id)) {
@@ -812,6 +1179,28 @@ export class TrainingScene implements TrainingRenderer {
     stage.refresh()
   }
 
+  /**
+   * Grows a fresh marker from 90% to full size over 200 ms with a strong
+   * ease-out — markers appear, they don't pop from nothing. Honours
+   * `prefers-reduced-motion`, and a marker replaced mid-flight simply stops.
+   */
+  private popIn(key: string, target: Vec3): void {
+    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return
+    }
+    const start = performance.now()
+    const duration = 200
+    const step = () => {
+      if (!this.stage.has(key)) return
+      const t = Math.min(1, (performance.now() - start) / duration)
+      const e = 1 - (1 - t) ** 3
+      const s = 0.9 + 0.1 * e
+      this.stage.place(key, { size: [target[0] * s, target[1] * s, target[2] * s] })
+      this.stage.refresh()
+      if (t < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }
 }
 
 /**

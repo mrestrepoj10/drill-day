@@ -115,18 +115,6 @@ const DRILLS: Drill[] = [
 type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
 type HoverLabel = { id: string; name: string; system: string; x: number; y: number };
 
-const VIEWER_CHROME_SELECTOR = [
-  ".homeViewWrapper",
-  ".viewcubeWrapper",
-  ".viewcube",
-  ".adsk-toolbar",
-  ".adsk-button",
-  ".adsk-control-group",
-].join(",");
-
-function isViewerChrome(target: EventTarget | null): boolean {
-  return target instanceof Element && !!target.closest(VIEWER_CHROME_SELECTOR);
-}
 
 export function TrainingDemo() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -151,7 +139,12 @@ export function TrainingDemo() {
     stage.setView(OVERVIEW);
     sceneRef.current = scene;
 
-    void loadTraining(handle.av, handle.viewer).then((nextTraining) => {
+    // Walls are solid to the walker; door openings are real gaps, so the
+    // routes through the building are exactly the ones a person could take.
+    handle.rig.moveFilter = (from, to) => !stage.blocked(from, to, ["wall:", "slab:"]);
+    handle.rig.heightAt = (x, z, eyeY) => stage.groundHeight(x, z, eyeY, ["slab:", "ramp"]);
+
+    void loadTraining(handle).then((nextTraining) => {
       nextTraining.setWorld({
         elements: [...ELEMENT_BY_ID.values()],
         rooms: ROOMS,
@@ -172,6 +165,19 @@ export function TrainingDemo() {
   );
   const snapshot = useCallback(() => training?.snapshot() ?? IDLE, [training]);
   const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+
+  // Machine-readable session breadcrumb for automated QA (agents driving the
+  // page can read position/room without scraping pixels). Invisible to users.
+  useEffect(() => {
+    const p = session.position;
+    document.documentElement.dataset.drill = JSON.stringify({
+      room: session.room ?? null,
+      level: session.level,
+      position: p ? p.map((v) => Math.round(v * 10) / 10) : null,
+      step: session.step?.id ?? null,
+      status: session.status,
+    });
+  }, [session]);
 
   // The console is an overlay at every width, closed by default. The first
   // agent-origin tool call opens it once, so the audit trail arrives as a
@@ -361,10 +367,6 @@ export function TrainingDemo() {
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-    if (isViewerChrome(event.target)) {
-      press.current = null;
-      return;
-    }
     if ((event.target as Element).closest("[data-viewer-marker]")) return;
     press.current = {
       pointerId: event.pointerId,
@@ -376,10 +378,6 @@ export function TrainingDemo() {
   };
 
   const onPointerMove = (event: React.PointerEvent) => {
-    if (isViewerChrome(event.target)) {
-      setHover(undefined);
-      return;
-    }
     const start = press.current;
     if (start?.pointerId === event.pointerId) {
       start.maxDistance = Math.max(
@@ -409,10 +407,6 @@ export function TrainingDemo() {
   };
 
   const onPointerUp = (event: React.PointerEvent) => {
-    if (isViewerChrome(event.target)) {
-      press.current = null;
-      return;
-    }
     const start = press.current;
     press.current = null;
     if (!start || start.pointerId !== event.pointerId) return;
@@ -602,7 +596,7 @@ export function TrainingDemo() {
             </div>
           ) : null}
 
-          {/* Persistent scene context belongs above the model, away from LMV's toolbar. */}
+          {/* Persistent scene context belongs above the model, clear of the canvas centre. */}
           <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
             <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-background/90 py-1.5 pl-3 pr-1.5 text-[12px]">
               <span className="leading-[1.4]">

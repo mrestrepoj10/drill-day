@@ -73,8 +73,7 @@ export function ViewerMarkers({
   }, []);
 
   return (
-    // LMV gives its own canvas layers a stacking order inside the viewer
-    // container, so the label layer has to sit explicitly above them.
+    // The label layer sits explicitly above the WebGL canvas.
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       {markers.map((m) => {
         const className = `invisible absolute left-0 top-0 rounded border px-2 py-1 text-[12px] leading-[1.4] shadow-lg backdrop-blur-sm ${

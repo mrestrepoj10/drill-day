@@ -1,4 +1,4 @@
-import type { AutodeskViewingGlobal, Vector3, Viewer3D } from "@layer0/viewer"
+import type { LocalViewerHandle } from "@layer0/viewer"
 import {
   levelAt,
   markArrival,
@@ -107,10 +107,8 @@ const EMPTY: TrainingSession = {
   trail: [],
 }
 
-let registered = false
-
 /**
- * `Layer0.ViewerTraining` — the scenario runtime, as a viewer extension.
+ * `Layer0.ViewerTraining` — the scenario runtime.
  *
  * It holds the mission, marks every answer against `evaluate.ts`, keeps the
  * transcript that the end-of-session replay is built from, and owns the two
@@ -118,12 +116,12 @@ let registered = false
  * what they are allowed to reach for. Everything about *this* building lives in
  * the world the host sets; everything about *this* lesson lives in the mission.
  * Load it against any model and it works the same way.
+ *
+ * This was an LMV `Extension`; it is now a plain class over the three.js
+ * viewer handle — same public face, no extension manager between it and the
+ * camera.
  */
-export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
-  if (registered) return
-  registered = true
-
-  class ViewerTrainingExtension extends av.Extension implements ViewerTraining {
+class ViewerTrainingRuntime implements ViewerTraining {
     private world: TrainingWorld = { elements: [], rooms: [], storeyHeight: 4, levels: 1, eyeHeight: 1.7 }
     private byId = new Map<ElementRef, TrainingElement>()
     private roomById = new Map<string, TrainingRoom>()
@@ -135,17 +133,10 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
     private lastSample: Vec3 | null = null
     private onCameraChange = () => this.sampleWalker()
     private walking = false
-    private listeningForWalk = false
+    private offWalkListener: (() => void) | null = null
     private walkEpoch = 0
 
-    load(): boolean {
-      return true
-    }
-
-    unload(): boolean {
-      this.exitWalk()
-      return true
-    }
+    constructor(private handle: LocalViewerHandle) {}
 
     // --- wiring -----------------------------------------------------------
 
@@ -301,9 +292,7 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       // camera event as BimWalk. Only first-person training navigation is
       // allowed to mutate the learner's route or satisfy a reach step.
       if (!this.walking) return
-      const nav = this.viewer.navigation
-      const p = nav?.getPosition?.()
-      if (!p) return
+      const p = this.handle.camera.position
       const point: Vec3 = [p.x, p.y, p.z]
       if (this.lastSample && distance(this.lastSample, point) < 0.4) return
       this.lastSample = point
@@ -414,7 +403,6 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
     // --- viewer state -----------------------------------------------------
 
     async applyViewerState(state: ViewerState): Promise<void> {
-      const { Vector3 } = av.Math
       if (state.isolate !== undefined) this.renderer?.isolate(state.isolate)
       if (state.sectionY !== undefined) this.setSection(state.sectionY)
       if (state.highlight) this.renderer?.highlight(state.highlight)
@@ -422,62 +410,45 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
         await this.enterWalk(state.walkTo, state.facing)
       } else if (state.camera) {
         this.exitWalk()
-        this.viewer.getCamera().setView({
-          position: new Vector3(...state.camera.position),
-          target: new Vector3(...state.camera.target),
-          up: new Vector3(0, 1, 0),
+        this.handle.rig.setView({
+          position: state.camera.position,
+          target: state.camera.target,
         })
-        this.viewer.refresh(true)
+        this.handle.requestRender()
       }
     }
 
     /**
-     * Hands navigation to `Autodesk.BimWalk`. On a runtime-built model this
-     * still collides and still holds eye height — the walker raycasts the
-     * rendered instances, so Scene API content is solid to it like any other.
+     * Puts the camera rig into first-person walk: pointer looks, WASD moves on
+     * the floor plane at eye height. There is no collision, and there does not
+     * need to be — arrival and straying are judged on room bounds, not walls.
      */
     async enterWalk(at?: Vec3, facing?: Vec3): Promise<void> {
-      const { Vector3 } = av.Math
       const epoch = ++this.walkEpoch
       // A camera snap must never be observed as learner movement. Reattach
-      // only after the first-person tool is active at the requested position.
+      // only after the first-person rig is active at the requested position.
       this.detachWalkListener()
+      this.handle.rig.enterWalk()
       if (at) {
-        const eye = new Vector3(at[0], at[1] + this.world.eyeHeight, at[2])
-        const look = facing
-          ? new Vector3(facing[0], facing[1] + this.world.eyeHeight, facing[2])
-          : new Vector3(at[0] + 1, at[1] + this.world.eyeHeight, at[2])
-        this.viewer.getCamera().setView({ position: eye, target: look, up: new Vector3(0, 1, 0) })
+        const eye: Vec3 = [at[0], at[1] + this.world.eyeHeight, at[2]]
+        const look: Vec3 = facing
+          ? [facing[0], facing[1] + this.world.eyeHeight, facing[2]]
+          : [at[0] + 1, at[1] + this.world.eyeHeight, at[2]]
+        this.handle.rig.setView({ position: eye, target: look })
         this.lastSample = null
       }
-      if (!this.walking) {
-        try {
-          // The page teaches WASD in the panel beside the model, so BimWalk's
-          // own first-run dialog would land on top of the exercise saying the
-          // same thing.
-          this.viewer.setBimWalkToolPopup?.(false)
-          const bimwalk = (await this.viewer.loadExtension("Autodesk.BimWalk")) as
-            | { activate?: () => void }
-            | undefined
-          if (epoch !== this.walkEpoch) return
-          bimwalk?.activate?.()
-          this.walking = true
-        } catch {
-          // No BimWalk in this build: orbit still lets the learner look around,
-          // and every other part of the scenario is unaffected.
-        }
-      }
       if (epoch !== this.walkEpoch) return
-      if (this.walking) this.attachWalkListener()
+      this.walking = true
+      this.attachWalkListener()
       // Inside the building now, so the ceiling belongs over the learner's head.
       this.renderer?.setCeiling?.(true)
-      this.viewer.refresh(true)
+      this.handle.requestRender()
       this.sampleWalker()
     }
 
     openCeiling(open: boolean): void {
       this.renderer?.setCeiling?.(!open)
-      this.viewer.refresh(true)
+      this.handle.requestRender()
     }
 
     exitWalk(): void {
@@ -486,40 +457,20 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       this.renderer?.setCeiling?.(false)
       if (!this.walking) return
       this.walking = false
-      try {
-        this.viewer.toolController?.deactivateTool("bimwalk")
-      } catch {
-        /* already gone */
-      }
+      this.handle.rig.exitWalk()
     }
 
     private attachWalkListener(): void {
-      if (this.listeningForWalk) return
-      const event = (av as unknown as { CAMERA_CHANGE_EVENT?: string }).CAMERA_CHANGE_EVENT
-      if (!event) return
-      this.viewer.addEventListener(event, this.onCameraChange)
-      this.listeningForWalk = true
+      this.offWalkListener ??= this.handle.rig.onChange(this.onCameraChange)
     }
 
     private detachWalkListener(): void {
-      if (!this.listeningForWalk) return
-      const event = (av as unknown as { CAMERA_CHANGE_EVENT?: string }).CAMERA_CHANGE_EVENT
-      if (event) this.viewer.removeEventListener(event, this.onCameraChange)
-      this.listeningForWalk = false
+      this.offWalkListener?.()
+      this.offWalkListener = null
     }
 
     setSection(y: number | null): void {
-      const V4 = (av.Math as unknown as { Vector4?: new (x: number, y: number, z: number, w: number) => unknown }).Vector4
-      if (y === null || y === undefined) {
-        this.viewer.setCutPlanes([])
-      } else if (V4) {
-        // LMV cuts the half-space where `n·p + d > 0`, so an up-pointing normal
-        // with `d = -height` removes everything above the plane and leaves the
-        // storey below it standing. (A down-pointing normal does the opposite,
-        // which is how you end up looking at a roof.)
-        this.viewer.setCutPlanes([new V4(0, 1, 0, -y)])
-      }
-      this.viewer.refresh(true)
+      this.handle.setCutY(y ?? null)
     }
 
     async goToLevel(level: number): Promise<void> {
@@ -567,7 +518,6 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       if (!marks.length) return
       this.exitWalk()
       this.renderer?.isolate(null)
-      const { Vector3 } = av.Math
       for (let i = 0; i < marks.length; i++) {
         const d = marks[i]
         onFrame?.(i)
@@ -580,12 +530,11 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
           // camera sits behind a partition and the replay is a tour of the
           // backs of walls.
           this.setSection(at[1] + 1.2)
-          this.viewer.getCamera().setView({
-            position: new Vector3(at[0] + 9, at[1] + 7, at[2] + 9),
-            target: new Vector3(...at),
-            up: new Vector3(0, 1, 0),
+          this.handle.rig.setView({
+            position: [at[0] + 9, at[1] + 7, at[2] + 9],
+            target: at,
           })
-          this.viewer.refresh(true)
+          this.handle.requestRender()
         }
         if (d.element) {
           this.renderer?.setSelection({
@@ -627,19 +576,11 @@ export function registerTrainingExtension(av: AutodeskViewingGlobal): void {
       this.session = { ...this.session, version: this.session.version + 1 }
       for (const fn of this.listeners) fn()
     }
-  }
-
-  av.theExtensionManager.registerExtension(TRAINING_EXTENSION_ID, ViewerTrainingExtension)
 }
 
-/** Loads the extension onto a viewer and hands back its public face. */
-export async function loadTraining(
-  av: AutodeskViewingGlobal,
-  viewer: Viewer3D,
-): Promise<ViewerTraining> {
-  registerTrainingExtension(av)
-  await viewer.loadExtension(TRAINING_EXTENSION_ID)
-  return viewer.getExtension(TRAINING_EXTENSION_ID) as ViewerTraining
+/** Creates the training runtime over a booted viewer handle. */
+export function loadTraining(handle: LocalViewerHandle): Promise<ViewerTraining> {
+  return Promise.resolve(new ViewerTrainingRuntime(handle))
 }
 
 function distance(a: Vec3, b: Vec3): number {
@@ -649,5 +590,3 @@ function distance(a: Vec3, b: Vec3): number {
 function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
-
-export type { Vector3 }

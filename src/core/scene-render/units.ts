@@ -189,6 +189,145 @@ export function unitBoxEdges(): GeometryBuffers {
   return { positions, normals: new Float32Array(0), indices: new Uint16Array(0) }
 }
 
+/** Torus about +Y: ring radius `R`, tube radius `r`, both in unit-cube scale. */
+export function torusBuffers(R: number, r: number, segments = 16, sides = 8): GeometryBuffers {
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let s = 0; s <= segments; s++) {
+    const a = (s / segments) * Math.PI * 2
+    const ca = Math.cos(a)
+    const sa = Math.sin(a)
+    for (let t = 0; t <= sides; t++) {
+      const b = (t / sides) * Math.PI * 2
+      const cb = Math.cos(b)
+      const sb = Math.sin(b)
+      positions.push(ca * (R + cb * r), sb * r, sa * (R + cb * r))
+      normals.push(ca * cb, sb, sa * cb)
+    }
+  }
+  const stride = sides + 1
+  for (let s = 0; s < segments; s++) {
+    for (let t = 0; t < sides; t++) {
+      const a = s * stride + t
+      const b = a + stride
+      indices.push(a, b, a + 1, a + 1, b, b + 1)
+    }
+  }
+  return {
+    positions: new Float32Array(positions),
+    normals: new Float32Array(normals),
+    indices: new Uint16Array(indices),
+  }
+}
+
+/** Translate + scale a buffer set in place-composition (returns a copy). */
+function placed(
+  buffers: GeometryBuffers,
+  scale: [number, number, number],
+  translate: [number, number, number],
+): GeometryBuffers {
+  const positions = new Float32Array(buffers.positions.length)
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] = buffers.positions[i] * scale[0] + translate[0]
+    positions[i + 1] = buffers.positions[i + 1] * scale[1] + translate[1]
+    positions[i + 2] = buffers.positions[i + 2] * scale[2] + translate[2]
+  }
+  // Normals survive axis-aligned scaling well enough for these low-poly parts.
+  return { positions, normals: buffers.normals.slice(), indices: buffers.indices.slice() }
+}
+
+/** Concatenate buffer sets into one geometry, re-basing indices. */
+function merged(parts: GeometryBuffers[]): GeometryBuffers {
+  let vertexCount = 0
+  let indexCount = 0
+  for (const p of parts) {
+    vertexCount += p.positions.length
+    indexCount += p.indices.length
+  }
+  const positions = new Float32Array(vertexCount)
+  const normals = new Float32Array(vertexCount)
+  const indices = new Uint16Array(indexCount)
+  let v = 0
+  let i = 0
+  for (const p of parts) {
+    positions.set(p.positions, v)
+    normals.set(p.normals, v)
+    const base = v / 3
+    for (let k = 0; k < p.indices.length; k++) indices[i + k] = p.indices[k] + base
+    v += p.positions.length
+    i += p.indices.length
+  }
+  return { positions, normals, indices }
+}
+
+/**
+ * An isolation valve that reads as a valve: a pipe run through the body, a
+ * round bonnet, and a handwheel on a stem. Fits the unit cube; an element's
+ * `size` stretches the whole assembly.
+ */
+export function unitValve(): GeometryBuffers {
+  const pipe = placed(unitCylinder(12), [0.34, 1, 0.34], [0, 0, 0])
+  // The pipe runs along X: reuse the +Y cylinder by swapping axes in scale via
+  // a rotated copy — cheaper to just author it as a stretched X-aligned box of
+  // revolution: swap coordinates.
+  const px = pipe.positions
+  for (let i = 0; i < px.length; i += 3) {
+    const y = px[i + 1]
+    px[i + 1] = px[i]
+    px[i] = y
+  }
+  const nx = pipe.normals
+  for (let i = 0; i < nx.length; i += 3) {
+    const y = nx[i + 1]
+    nx[i + 1] = nx[i]
+    nx[i] = y
+  }
+  return merged([
+    pipe,
+    placed(unitSphere(8, 12), [0.56, 0.56, 0.56], [0, 0, 0]), // body
+    placed(unitCylinder(10), [0.1, 0.45, 0.1], [0, 0.3, 0]), // stem
+    placed(torusBuffers(0.5, 0.09, 14, 6), [0.42, 0.42, 0.42], [0, 0.48, 0]), // handwheel
+  ])
+}
+
+/**
+ * A fire extinguisher silhouette: bottle, domed shoulder, neck and a squeeze
+ * handle. Authored upright in the unit cube, base at y = −0.5.
+ */
+export function unitExtinguisher(): GeometryBuffers {
+  return merged([
+    placed(unitCylinder(14), [0.62, 0.72, 0.62], [0, -0.13, 0]), // bottle
+    placed(unitSphere(8, 14), [0.62, 0.36, 0.62], [0, 0.23, 0]), // shoulder dome
+    placed(unitCylinder(10), [0.16, 0.18, 0.16], [0, 0.4, 0]), // neck
+    placed(unitBox(), [0.3, 0.07, 0.09], [0.08, 0.48, 0]), // carry/squeeze lever
+    placed(unitBox(), [0.07, 0.16, 0.09], [-0.1, 0.44, 0]), // trigger grip
+  ])
+}
+
+/**
+ * Corner brackets of a unit cube: at each of the 8 corners, three short ticks
+ * run inward along the edges — a viewfinder, not a cage. `tick` is the tick
+ * length as a fraction of the edge.
+ */
+export function unitBoxCorners(tick = 0.28): GeometryBuffers {
+  const positions: number[] = []
+  for (const sx of [-0.5, 0.5]) {
+    for (const sy of [-0.5, 0.5]) {
+      for (const sz of [-0.5, 0.5]) {
+        positions.push(sx, sy, sz, sx - Math.sign(sx) * tick, sy, sz)
+        positions.push(sx, sy, sz, sx, sy - Math.sign(sy) * tick, sz)
+        positions.push(sx, sy, sz, sx, sy, sz - Math.sign(sz) * tick)
+      }
+    }
+  }
+  return {
+    positions: new Float32Array(positions),
+    normals: new Float32Array(0),
+    indices: new Uint16Array(0),
+  }
+}
+
 /** A flat grid of line segments in the XZ plane, `divisions` cells per side. */
 export function gridLines(size: number, divisions: number): GeometryBuffers {
   const positions: number[] = []

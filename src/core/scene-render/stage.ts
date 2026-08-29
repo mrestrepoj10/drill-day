@@ -1,13 +1,19 @@
-import type {
-  LocalViewerHandle,
-  Matrix4,
-  MaterialParams,
-  SceneMaterial,
-  Vector3,
-} from "@layer0/viewer"
+import * as THREE from "three"
+import type { LocalViewerHandle } from "@layer0/viewer"
 import type { GeometryBuffers } from "./geometry"
 import { parseColor, type Vec3 } from "./spec"
-import { gridLines, unitArrow, unitBox, unitBoxEdges, unitCylinder, unitPlane, unitSphere } from "./units"
+import {
+  gridLines,
+  unitArrow,
+  unitBox,
+  unitBoxCorners,
+  unitBoxEdges,
+  unitCylinder,
+  unitExtinguisher,
+  unitPlane,
+  unitSphere,
+  unitValve,
+} from "./units"
 
 /** Where an instance sits. Everything is expressed relative to the unit geometry. */
 export interface Placement {
@@ -27,7 +33,7 @@ export interface Appearance {
   opacity?: number
   /** Draw unlit — flat colour regardless of lighting. Good for HUD-ish content. */
   unlit?: boolean
-  /** Draw as line segments (`LineMaterial`); requires a line geometry. */
+  /** Draw as line segments; requires a line geometry. */
   lines?: boolean
   metal?: boolean
   /** Draw on top of everything, ignoring depth — for guides and highlights. */
@@ -45,7 +51,6 @@ export interface StageItemInit extends Placement, Appearance {
 
 export interface StageItem extends StageItemInit {
   id: string
-  lmvId: number
 }
 
 export interface CameraView {
@@ -61,64 +66,51 @@ const BUILT_INS: Record<string, () => GeometryBuffers> = {
   arrow: unitArrow,
   sphere: unitSphere,
   boxEdges: unitBoxEdges,
+  boxCorners: () => unitBoxCorners(),
   grid: () => gridLines(1, 10),
+  valve: unitValve,
+  extinguisher: unitExtinguisher,
 }
 
 /**
- * A thin, mutable scene on top of `InstanceCollection3D`.
+ * A thin, mutable scene of shared unit geometries and per-item transforms.
  *
- * `SceneRenderer` (see `render.ts`) renders a *document*: emit a new spec, diff
- * it, swap what changed. That is the right model for content an agent authors
- * in one shot. It is the wrong model for a scene that is being simulated —
- * every temperature tick would tear down and rebuild geometry.
+ * Geometry is uploaded once as a unit primitive and shared; placement lives in
+ * the object's matrix and colour in its material, so moving a rack or
+ * recolouring 200 floor tiles reallocates nothing and is cheap enough to run
+ * inside an animation frame.
  *
- * `Stage` is the other half: geometry is uploaded once as a unit primitive and
- * shared, placement lives in a per-instance `Matrix4`, and colour lives in the
- * material. Moving a rack is `setTransformLocal`; recolouring 200 floor tiles
- * to a new heat field is 200 `setMaterial` calls and one `refresh`. Nothing is
- * reallocated, so the same call is cheap enough to run inside an animation
- * frame.
- *
- * Grouping is composed here rather than in the viewer. `avs.Node3D` /
- * `avs.InstanceNode3D` do exist in the 7.x bundle, but on the build we tested
- * neither a node transform nor a node visibility state propagates to instances
- * added through the collection, so `Stage` multiplies the group matrix into
- * each child's local matrix itself.
+ * Rendering is on-demand: mutations mark the stage dirty, `refresh` schedules
+ * one redraw. There is no progressive renderer underneath any more, so a busy
+ * frame can no longer flicker half-drawn.
  */
 export class Stage {
-  private geometries = new Map<string, unknown>()
+  private geometries = new Map<string, THREE.BufferGeometry>()
   private items = new Map<string, StageItem>()
-  private byLmvId = new Map<number, string>()
+  private objects = new Map<string, THREE.Mesh | THREE.LineSegments>()
   private groups = new Map<string, { position: Vec3; rotationY: number }>()
   private cameraAnimation = 0
-  /**
-   * Whether anything has actually changed since the last redraw.
-   *
-   * A simulated scene calls `sync` on every tick, and most of those ticks
-   * change nothing — the same temperature, the same transform. Passing them all
-   * through to `viewer.refresh` restarts the viewer's progressive render before
-   * it has finished, so a busy hall never draws its last few hundred
-   * instances. Writes that are genuinely no-ops are dropped here instead.
-   */
+  private raycaster = new THREE.Raycaster()
   private dirty = false
 
   constructor(private handle: LocalViewerHandle) {}
 
   // --- geometry -----------------------------------------------------------
 
-  /** Uploads a `BufferGeometry` under `key`; later `add`s reference it by name. */
+  /** Registers `buffers` under `key`; later `add`s reference it by name. */
   defineGeometry(key: string, buffers: GeometryBuffers): void {
-    const avs = this.handle.av.Scene
-    const geometry = new avs.BufferGeometry()
-    geometry.setAttribute("position", new avs.BufferAttribute(buffers.positions, 3))
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute("position", new THREE.BufferAttribute(buffers.positions, 3))
     if (buffers.normals.length) {
-      geometry.setAttribute("normal", new avs.BufferAttribute(buffers.normals, 3))
+      geometry.setAttribute("normal", new THREE.BufferAttribute(buffers.normals, 3))
     }
-    if (buffers.indices.length) geometry.setIndices(buffers.indices)
+    if (buffers.indices.length) {
+      geometry.setIndex(new THREE.BufferAttribute(buffers.indices, 1))
+    }
     this.geometries.set(key, geometry)
   }
 
-  private geometry(key: string): unknown {
+  private geometry(key: string): THREE.BufferGeometry {
     const existing = this.geometries.get(key)
     if (existing) return existing
     const builtIn = BUILT_INS[key]
@@ -132,13 +124,20 @@ export class Stage {
   /** Adds the instance, or updates it in place if `id` already exists. */
   set(id: string, init: StageItemInit): void {
     const existing = this.items.get(id)
-    if (!existing || existing.geometry !== init.geometry) {
+    if (!existing || existing.geometry !== init.geometry || !!existing.lines !== !!init.lines) {
       if (existing) this.remove(id)
-      const lmvId = this.handle.model
-        .getInstances()
-        .add(this.geometry(init.geometry), this.material(init), this.matrix(init))
-      this.items.set(id, { ...init, id, lmvId })
-      this.byLmvId.set(lmvId, id)
+      const geometry = this.geometry(init.geometry)
+      const material = this.material(init)
+      const object = init.lines
+        ? new THREE.LineSegments(geometry, material)
+        : new THREE.Mesh(geometry, material)
+      object.matrixAutoUpdate = false
+      object.matrix.copy(this.matrix(init))
+      object.name = id
+      if (init.throughWalls) object.renderOrder = 10
+      this.handle.scene.add(object)
+      this.items.set(id, { ...init, id })
+      this.objects.set(id, object)
       this.dirty = true
       return
     }
@@ -149,9 +148,9 @@ export class Stage {
       !!existing.decorative !== !!next.decorative || existing.group !== next.group
     if (!moved && !repainted && !reclassified) return
     this.items.set(id, next)
-    const instances = this.handle.model.getInstances()
-    if (moved) instances.setTransformLocal(existing.lmvId, this.matrix(next))
-    if (repainted) instances.setMaterial(existing.lmvId, this.material(next))
+    const object = this.objects.get(id)!
+    if (moved || reclassified) object.matrix.copy(this.matrix(next))
+    if (repainted) this.repaintObject(object, next)
     if (moved || repainted) this.dirty = true
   }
 
@@ -162,7 +161,7 @@ export class Stage {
     const next = { ...item, ...patch }
     if (samePlacement(item, next)) return
     this.items.set(id, next)
-    this.handle.model.getInstances().setTransformLocal(item.lmvId, this.matrix(next))
+    this.objects.get(id)!.matrix.copy(this.matrix(next))
     this.dirty = true
   }
 
@@ -173,15 +172,16 @@ export class Stage {
     const next = { ...item, ...patch }
     if (sameAppearance(item, next)) return
     this.items.set(id, next)
-    this.handle.model.getInstances().setMaterial(item.lmvId, this.material(next))
+    this.repaintObject(this.objects.get(id)!, next)
     this.dirty = true
   }
 
   remove(id: string): void {
-    const item = this.items.get(id)
-    if (!item) return
-    this.handle.model.getInstances().remove(item.lmvId)
-    this.byLmvId.delete(item.lmvId)
+    const object = this.objects.get(id)
+    if (!object) return
+    this.handle.scene.remove(object)
+    ;(object.material as THREE.Material).dispose()
+    this.objects.delete(id)
     this.items.delete(id)
     this.dirty = true
   }
@@ -227,10 +227,10 @@ export class Stage {
       rotationY: transform.rotationY ?? current.rotationY,
     }
     this.groups.set(group, next)
-    const instances = this.handle.model.getInstances()
     for (const item of this.items.values()) {
-      if (item.group === group) instances.setTransformLocal(item.lmvId, this.matrix(item))
+      if (item.group === group) this.objects.get(item.id)!.matrix.copy(this.matrix(item))
     }
+    this.dirty = true
   }
 
   groupTransform(group: string): { position: Vec3; rotationY: number } {
@@ -239,10 +239,7 @@ export class Stage {
 
   // --- picking ------------------------------------------------------------
 
-  /**
-   * Screen point → stage id. `impl.hitTest` returns `fragId`, which for a
-   * dynamic model is exactly the id `instances.add` handed back.
-   */
+  /** Screen point → stage id. */
   pick(clientX: number, clientY: number): StageItem | undefined {
     const hit = this.rawHit(clientX, clientY)
     return hit?.item && !hit.item.decorative ? hit.item : undefined
@@ -259,11 +256,17 @@ export class Stage {
     clientY: number,
     ids: readonly string[],
     radiusPx = 18,
+    /**
+     * Ids exempt from the occlusion guard. An element the scene is already
+     * showing through walls (a highlight cage) must also be clickable through
+     * them — seeing it and not being able to answer with it is a trap.
+     */
+    xray: ReadonlySet<string> = EMPTY_SET,
   ): StageItem | undefined {
     const exact = this.pick(clientX, clientY)
     if (exact) return exact
 
-    const rect = this.handle.viewer.impl.getCanvasBoundingClientRect()
+    const rect = this.handle.canvas.getBoundingClientRect()
     const pointerX = clientX - rect.left
     const pointerY = clientY - rect.top
     const blocker = this.rawHit(clientX, clientY)
@@ -276,7 +279,22 @@ export class Stage {
       const projected = this.project(item.position)
       if (!projected) continue
       const screenDistance = Math.hypot(projected.x - pointerX, projected.y - pointerY)
-      if (screenDistance > radiusPx) continue
+      // An x-ray candidate is being shown as a whole cage; anywhere inside
+      // its projected extent is a fair answer, not just its centre.
+      let effectiveRadius = radiusPx
+      if (xray.has(id)) {
+        const size = item.size ?? [1, 1, 1]
+        const worldRadius = Math.hypot(size[0], size[1], size[2]) / 2
+        const eye = this.handle.camera.position
+        const away = Math.hypot(
+          item.position[0] - eye.x,
+          item.position[1] - eye.y,
+          item.position[2] - eye.z,
+        )
+        const focal = rect.height / (2 * Math.tan((this.handle.camera.fov * Math.PI) / 360))
+        effectiveRadius = Math.max(radiusPx, (worldRadius / Math.max(away, 0.1)) * focal)
+      }
+      if (screenDistance > effectiveRadius) continue
 
       let cameraDistance = 0
       if (view) {
@@ -288,6 +306,7 @@ export class Stage {
         const size = item.size ?? [1, 1, 1]
         const itemRadius = Math.hypot(size[0], size[1], size[2]) / 2
         if (
+          !xray.has(id) &&
           blocker?.item?.decorative &&
           blocker.distance + 0.25 < cameraDistance - itemRadius
         ) {
@@ -306,24 +325,72 @@ export class Stage {
     clientX: number,
     clientY: number,
   ): { item?: StageItem; distance: number } | undefined {
-    const rect = this.handle.viewer.impl.getCanvasBoundingClientRect()
-    const hit = this.handle.viewer.impl.hitTest(clientX - rect.left, clientY - rect.top, true)
-    if (!hit) return undefined
-    const id = this.byLmvId.get(hit.fragId)
-    return { item: id ? this.items.get(id) : undefined, distance: hit.distance }
+    const rect = this.handle.canvas.getBoundingClientRect()
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(ndc, this.handle.camera)
+    // Respect the cutaway: anything above the section plane is invisible, so
+    // it must not swallow picks aimed at the storey below it.
+    const planes = this.handle.renderer.clippingPlanes
+    for (const hit of this.raycaster.intersectObjects(
+      [...this.objects.values()].filter((o) => o.visible && o.type === "Mesh"),
+      false,
+    )) {
+      const item = this.items.get(hit.object.name)
+      if (!item) continue
+      // Transparent content (ceiling tiles, ghosted context) is pick-through,
+      // matching the old `hitTest(..., ignoreTransparent)` behaviour.
+      if ((item.opacity ?? 1) < 1) continue
+      if (planes.some((p) => p.distanceToPoint(hit.point) < 0)) continue
+      return { item, distance: hit.distance }
+    }
+    return undefined
+  }
+
+  /**
+   * True when the segment from `from` to `to` passes through an item whose id
+   * starts with one of `prefixes` — the walk-mode collision test. A margin
+   * keeps the camera's near plane out of the wall face.
+   */
+  blocked(from: Vec3, to: Vec3, prefixes: readonly string[], margin = 0.35): boolean {
+    const origin = new THREE.Vector3(...from)
+    const target = new THREE.Vector3(...to)
+    const direction = target.clone().sub(origin)
+    const distance = direction.length()
+    if (distance < 1e-6) return false
+    this.raycaster.set(origin, direction.normalize())
+    this.raycaster.far = distance + margin
+    const solids = [...this.objects.values()].filter(
+      (o) => o.type === "Mesh" && prefixes.some((p) => o.name.startsWith(p)),
+    )
+    const hit = this.raycaster.intersectObjects(solids, false).length > 0
+    this.raycaster.far = Infinity
+    return hit
+  }
+
+  /**
+   * The walking surface under plan position (x, z), probed downward from just
+   * below eye level so an upper storey doesn't shadow the one being walked.
+   */
+  groundHeight(x: number, z: number, eyeY: number, prefixes: readonly string[]): number | null {
+    this.raycaster.set(new THREE.Vector3(x, eyeY - 0.2, z), new THREE.Vector3(0, -1, 0))
+    this.raycaster.far = 4
+    const solids = [...this.objects.values()].filter(
+      (o) => o.type === "Mesh" && prefixes.some((p) => o.name.startsWith(p)),
+    )
+    const hit = this.raycaster.intersectObjects(solids, false)[0]
+    this.raycaster.far = Infinity
+    return hit ? hit.point.y : null
   }
 
   // --- camera -------------------------------------------------------------
 
   /** Snaps the camera. */
   setView(view: CameraView): void {
-    const { Vector3 } = this.handle.av.Math
     this.cameraAnimation++
-    this.handle.viewer.getCamera().setView({
-      position: new Vector3(...view.position),
-      target: new Vector3(...view.target),
-      up: new Vector3(...(view.up ?? [0, 1, 0])),
-    })
+    this.handle.rig.setView(view)
     this.refresh(true)
   }
 
@@ -333,11 +400,8 @@ export class Stage {
    * tool call legible to the human watching.
    */
   flyTo(view: CameraView, ms = 900): Promise<void> {
-    const { Vector3 } = this.handle.av.Math
-    const camera = this.handle.viewer.getCamera()
     const from = this.currentView()
     const token = ++this.cameraAnimation
-    const up = new Vector3(...(view.up ?? [0, 1, 0]))
     if (!from || ms <= 0) {
       this.setView(view)
       return Promise.resolve()
@@ -348,10 +412,9 @@ export class Stage {
         if (token !== this.cameraAnimation) return resolve()
         const t = Math.min(1, (performance.now() - start) / ms)
         const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2 // easeInOutQuad
-        camera.setView({
-          position: new Vector3(...lerp3(from.position, view.position, e)),
-          target: new Vector3(...lerp3(from.target, view.target, e)),
-          up,
+        this.handle.rig.setView({
+          position: lerp3(from.position, view.position, e),
+          target: lerp3(from.target, view.target, e),
         })
         this.refresh(true)
         if (t < 1) requestAnimationFrame(step)
@@ -361,15 +424,9 @@ export class Stage {
     })
   }
 
-  /** Current camera position/target, read back off the viewer. */
+  /** Current camera position/target, read back off the rig. */
   currentView(): CameraView | undefined {
-    const nav = this.handle.viewer.navigation as
-      | { getPosition?: () => Vector3; getTarget?: () => Vector3 }
-      | undefined
-    const p = nav?.getPosition?.()
-    const t = nav?.getTarget?.()
-    if (!p || !t) return undefined
-    return { position: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }
+    return this.handle.rig.getView()
   }
 
   /** A three-quarter view framing a box of `size` centred on `centre`. */
@@ -389,27 +446,19 @@ export class Stage {
 
   /**
    * World point → canvas pixels, for HTML labels pinned to 3D positions.
-   *
-   * `impl.worldToClient` gives the pixel position but its `z` is not a reliable
-   * "is this behind me" flag across builds, so the facing test is done directly
-   * against the camera: a point on the far side of the eye plane is dropped
-   * rather than drawn mirrored on the wrong side of the screen.
+   * Points behind the eye plane are dropped rather than drawn mirrored on the
+   * wrong side of the screen.
    */
   project(point: Vec3): { x: number; y: number } | undefined {
-    const { Vector3 } = this.handle.av.Math
-    const view = this.currentView()
-    if (view) {
-      const [px, py, pz] = view.position
-      const [tx, ty, tz] = view.target
-      const fx = tx - px
-      const fy = ty - py
-      const fz = tz - pz
-      const dot = (point[0] - px) * fx + (point[1] - py) * fy + (point[2] - pz) * fz
-      if (dot <= 0) return undefined
-    }
-    const p = this.handle.viewer.impl.worldToClient(new Vector3(...point))
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return undefined
-    return { x: p.x, y: p.y }
+    const camera = this.handle.camera
+    const world = new THREE.Vector3(...point)
+    const toPoint = world.clone().sub(camera.position)
+    const forward = camera.getWorldDirection(new THREE.Vector3())
+    if (toPoint.dot(forward) <= 0) return undefined
+    const ndc = world.project(camera)
+    if (!Number.isFinite(ndc.x) || !Number.isFinite(ndc.y)) return undefined
+    const rect = this.handle.canvas.getBoundingClientRect()
+    return { x: ((ndc.x + 1) / 2) * rect.width, y: ((1 - ndc.y) / 2) * rect.height }
   }
 
   /**
@@ -418,24 +467,22 @@ export class Stage {
    * the pointer stays under the geometry instead of the geometry chasing it.
    */
   groundPoint(clientX: number, clientY: number, planeY = 0): Vec3 | undefined {
-    const impl = this.handle.viewer.impl
-    const rect = impl.getCanvasBoundingClientRect()
-    const x = clientX - rect.left
-    const y = clientY - rect.top
-    try {
-      const ray = impl.viewportToRay(impl.clientToViewport(x, y))
-      const dy = ray.direction.y
-      if (Math.abs(dy) < 1e-6) return undefined
-      const t = (planeY - ray.origin.y) / dy
-      if (t < 0) return undefined
-      return [
-        ray.origin.x + ray.direction.x * t,
-        planeY,
-        ray.origin.z + ray.direction.z * t,
-      ]
-    } catch {
-      return undefined
-    }
+    const rect = this.handle.canvas.getBoundingClientRect()
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(ndc, this.handle.camera)
+    const ray = this.raycaster.ray
+    const dy = ray.direction.y
+    if (Math.abs(dy) < 1e-6) return undefined
+    const t = (planeY - ray.origin.y) / dy
+    if (t < 0) return undefined
+    return [
+      ray.origin.x + ray.direction.x * t,
+      planeY,
+      ray.origin.z + ray.direction.z * t,
+    ]
   }
 
   /**
@@ -445,57 +492,74 @@ export class Stage {
   refresh(force = false): void {
     if (!force && !this.dirty) return
     this.dirty = false
-    this.handle.viewer.refresh(true)
+    this.handle.requestRender()
   }
 
   // --- internals ----------------------------------------------------------
 
-  private material(a: Appearance): SceneMaterial {
-    const avs = this.handle.av.Scene
-    const params: MaterialParams = { color: parseColor(a.color) }
-    if (a.opacity !== undefined && a.opacity < 1) {
-      params.opacity = a.opacity
-      params.transparent = true
+  private material(a: Appearance): THREE.Material {
+    const color = parseColor(a.color)
+    const transparent = a.opacity !== undefined && a.opacity < 1
+    const opacity = transparent ? a.opacity! : 1
+    let material: THREE.Material
+    if (a.lines) {
+      material = new THREE.LineBasicMaterial({ color, transparent, opacity })
+    } else if (a.unlit) {
+      material = new THREE.MeshBasicMaterial({ color, transparent, opacity })
+    } else {
+      material = new THREE.MeshStandardMaterial({
+        color,
+        transparent,
+        opacity,
+        // Without an environment map high metalness reads as near-black, so
+        // "metal" here means brushed sheet, not chrome.
+        metalness: a.metal ? 0.45 : 0.05,
+        roughness: a.metal ? 0.4 : 0.85,
+      })
     }
     if (a.throughWalls) {
-      params.depthTest = false
-      params.depthWrite = false
+      material.depthTest = false
+      material.depthWrite = false
     }
-    if (a.lines) return new avs.LineMaterial(params)
-    if (a.unlit) return new avs.UnlitMaterial(params)
-    if (a.metal) params.metal = true
-    return new avs.StandardMaterial(params)
+    return material
   }
 
-  private matrix(p: Placement & { group?: string }): Matrix4 {
-    const { Vector3, Quaternion, Matrix4 } = this.handle.av.Math
+  private repaintObject(object: THREE.Mesh | THREE.LineSegments, next: Appearance): void {
+    ;(object.material as THREE.Material).dispose()
+    object.material = this.material(next)
+    object.renderOrder = next.throughWalls ? 10 : 0
+  }
+
+  private matrix(p: Placement & { group?: string }): THREE.Matrix4 {
     const size = p.size ?? [1, 1, 1]
-    const quaternion = new Quaternion()
+    const quaternion = new THREE.Quaternion()
     if (p.direction) {
       const [dx, dy, dz] = p.direction
       const len = Math.hypot(dx, dy, dz) || 1
       quaternion.setFromUnitVectors(
-        new Vector3(0, 1, 0),
-        new Vector3(dx / len, dy / len, dz / len),
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(dx / len, dy / len, dz / len),
       )
     } else if (p.rotationY) {
-      quaternion.setFromAxisAngle(new Vector3(0, 1, 0), p.rotationY)
+      quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.rotationY)
     }
-    const local = new Matrix4().compose(
-      new Vector3(...p.position),
+    const local = new THREE.Matrix4().compose(
+      new THREE.Vector3(...p.position),
       quaternion,
-      new Vector3(...size),
+      new THREE.Vector3(...size),
     )
     const group = p.group ? this.groups.get(p.group) : undefined
     if (!group) return local
-    const parent = new Matrix4().compose(
-      new Vector3(...group.position),
-      new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), group.rotationY),
-      new Vector3(1, 1, 1),
+    const parent = new THREE.Matrix4().compose(
+      new THREE.Vector3(...group.position),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), group.rotationY),
+      new THREE.Vector3(1, 1, 1),
     )
-    return new Matrix4().multiplyMatrices(parent, local)
+    return new THREE.Matrix4().multiplyMatrices(parent, local)
   }
 }
+
+const EMPTY_SET: ReadonlySet<string> = new Set()
 
 function lerp3(a: Vec3, b: Vec3, t: number): Vec3 {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
