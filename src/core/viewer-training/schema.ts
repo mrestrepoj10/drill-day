@@ -188,8 +188,8 @@ export interface TrainingSession {
   level: number
   /** Coaching lines, from the app or from an agent. */
   coaching: { at: number; from: "app" | "agent"; text: string }[]
-  /** Path the learner has walked, for the replay. */
-  trail: Vec3[]
+  /** Path the learner has walked, timestamped so the plan can age it out. */
+  trail: { at: number; point: Vec3 }[]
 }
 
 /**

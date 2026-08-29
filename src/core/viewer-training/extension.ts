@@ -299,7 +299,7 @@ class ViewerTrainingRuntime implements ViewerTraining {
 
       const level = levelAt(point[1] - this.world.eyeHeight, this.world.storeyHeight, this.world.levels)
       const room = roomAt(point, this.world.rooms, level)
-      const trail = [...this.session.trail, point].slice(-600)
+      const trail = [...this.session.trail, { at: Date.now(), point }].slice(-600)
       const wasRoom = this.session.room
       this.session = { ...this.session, position: point, room, level, trail }
 

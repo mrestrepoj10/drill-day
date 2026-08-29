@@ -329,6 +329,30 @@ a {
   }
 }
 
+/* Learning cues breathe rather than flash: a slow luminance shimmer that says
+   "consider this" without competing with verdict colours. Shared timing with
+   the 3D scene's cue shimmer so plan and model pulse as one system. */
+@keyframes cue-shimmer {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.plan-cue {
+  animation: cue-shimmer 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-cue {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
 .workspace-action-arrow {
   transition: transform 160ms var(--ease-out);
 }

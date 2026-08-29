@@ -83,6 +83,11 @@ export class TrainingScene implements TrainingRenderer {
   private selection: { id: string; tone: HighlightTone } | null = null
   private isolated: Set<string> | null = null
   private ceiling: string[] = []
+  /** Element ids currently carrying a tone tint, for cleanup on change. */
+  private tinted = new Set<string>()
+  /** Cue-toned ids currently breathing, and the rAF driving them. */
+  private shimmering = new Map<string, HighlightTone>()
+  private shimmerFrame: number | null = null
   private ceilingSize = new Map<string, Vec3>()
   // Built in place, then lifted: the first view of the model is from outside.
   private ceilingDown = true
@@ -962,6 +967,9 @@ export class TrainingScene implements TrainingRenderer {
     // front of it — the learner answers by clicking, and a solid halo would eat
     // the pick ray before it ever reached the element being marked.
     const color = tone ? TONE_COLOR[tone] : ghosted ? GHOST : base
+    // A cue must stay visible wherever the old cages were — including through
+    // fabric — so cue-toned components render as a through-wall silhouette.
+    const xray = tone === "trace" || tone === "ask"
     const [sx, sy, sz] = element.size
 
     if (/valve|isolator/i.test(element.name)) {
@@ -971,6 +979,7 @@ export class TrainingScene implements TrainingRenderer {
         size: [sx * 1.3, sy * 1.08, sz * 1.3],
         color,
         unlit: !!tone,
+        throughWalls: xray,
         opacity: ghosted ? 0.3 : 1,
       }
     }
@@ -984,6 +993,7 @@ export class TrainingScene implements TrainingRenderer {
         size: [sx, sy, sz],
         color: tone ? color : ghosted ? GHOST : SAFETY_RED,
         unlit: !!tone,
+        throughWalls: xray,
         opacity: ghosted ? 0.3 : 1,
       }
     }
@@ -1004,6 +1014,7 @@ export class TrainingScene implements TrainingRenderer {
         direction,
         color: tone ? color : ghosted ? GHOST : INSULATION,
         metal: !tone && !ghosted,
+        throughWalls: xray,
         // Marked elements are drawn unlit. Half of this building is inside a
         // cupboard with no daylight, and a highlight that a shadow can swallow
         // is not a highlight.
@@ -1037,6 +1048,7 @@ export class TrainingScene implements TrainingRenderer {
       size: element.size,
       color: tone ? color : ghosted ? GHOST : ducty ? GALVANISED : casing ?? base,
       metal: ducty && !tone && !ghosted,
+      throughWalls: xray,
       unlit: !!tone,
       opacity: ghosted ? 0.3 : 1,
     }
@@ -1145,61 +1157,64 @@ export class TrainingScene implements TrainingRenderer {
     )
     for (const [id, tone] of this.highlighted) visible.set(id, tone)
     if (this.selection) visible.set(this.selection.id, this.selection.tone)
-    for (const [id, tone] of visible) {
-      const element = ELEMENT_BY_ID.get(id)
-      if (!element) continue
+    for (const id of visible.keys()) {
+      if (!ELEMENT_BY_ID.has(id)) continue
       this.repaint(id)
-      const key = `hl:${id}`
-      wanted.add(key)
-      // Corner brackets, not a cage: a full wireframe cube reads as a debug
-      // bounding box; a viewfinder reads as intent. Padding is proportional so
-      // the marker hugs a valve as closely as it hugs an AHU, and the lines
-      // still draw through fabric — spotting a cue through a wall is part of
-      // the coaching. Line-only geometry stays out of hit testing.
-      const pad = (d: number) => d + Math.max(0.12, d * 0.16)
-      const size: Vec3 = [pad(element.size[0]), pad(element.size[1]), pad(element.size[2])]
-      const fresh = !stage.has(key)
-      stage.set(key, {
-        geometry: "boxCorners",
-        position: element.position,
-        size,
-        color: TONE_COLOR[tone],
-        lines: true,
-        throughWalls: true,
-        decorative: true,
-      })
-      if (fresh) this.popIn(key, size)
+      wanted.add(id)
     }
+    // No cages, no brackets: the marked component itself carries the tone.
+    // Anything left from an older marking style is cleared.
     for (const id of stage.ids()) {
-      if (id.startsWith("hl:") && !wanted.has(id)) {
-        stage.remove(id)
-        this.repaint(id.slice(3))
-      }
+      if (id.startsWith("hl:")) stage.remove(id)
     }
+    this.syncShimmer(
+      new Map(
+        [...visible].filter(([, tone]) => tone === "trace" || tone === "ask"),
+      ),
+    )
+    for (const id of this.tinted) {
+      if (!wanted.has(id)) this.repaint(id)
+    }
+    this.tinted = wanted
     stage.refresh()
   }
 
   /**
-   * Grows a fresh marker from 90% to full size over 200 ms with a strong
-   * ease-out — markers appear, they don't pop from nothing. Honours
-   * `prefers-reduced-motion`, and a marker replaced mid-flight simply stops.
+   * Cues shimmer instead of wearing a box: a slow luminance breath on the
+   * component itself (2.4 s, matching the plan's `.plan-cue` pulse), subtle
+   * enough to live on screen constantly. Verdict and selection tones stay
+   * steady — they are state, not attention. Honours `prefers-reduced-motion`
+   * by holding a static tint.
    */
-  private popIn(key: string, target: Vec3): void {
-    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  private syncShimmer(cues: Map<string, HighlightTone>): void {
+    this.shimmering = cues
+    const reduced =
+      typeof matchMedia === "function" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (!cues.size || reduced) {
+      if (this.shimmerFrame !== null) cancelAnimationFrame(this.shimmerFrame)
+      this.shimmerFrame = null
       return
     }
-    const start = performance.now()
-    const duration = 200
-    const step = () => {
-      if (!this.stage.has(key)) return
-      const t = Math.min(1, (performance.now() - start) / duration)
-      const e = 1 - (1 - t) ** 3
-      const s = 0.9 + 0.1 * e
-      this.stage.place(key, { size: [target[0] * s, target[1] * s, target[2] * s] })
+    if (this.shimmerFrame !== null) return
+    let last = 0
+    const step = (t: number) => {
+      if (!this.shimmering.size) {
+        this.shimmerFrame = null
+        return
+      }
+      this.shimmerFrame = requestAnimationFrame(step)
+      if (t - last < 33) return // 30 fps is plenty for a breath
+      last = t
+      const k = 0.5 - 0.5 * Math.cos(((t % 2400) / 2400) * Math.PI * 2)
+      for (const [id, tone] of this.shimmering) {
+        this.stage.paint(`el:${id}`, {
+          color: shade(TONE_COLOR[tone], 0.08 + 0.3 * k),
+        })
+      }
       this.stage.refresh()
-      if (t < 1) requestAnimationFrame(step)
     }
-    requestAnimationFrame(step)
+    this.shimmerFrame = requestAnimationFrame(step)
   }
 }
 

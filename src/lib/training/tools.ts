@@ -512,11 +512,11 @@ function compile(input: AuthoredMission, t: ViewerTraining): Mission {
   }
 }
 
-function pathLength(trail: [number, number, number][]): number {
+function pathLength(trail: { at: number; point: [number, number, number] }[]): number {
   let total = 0
   for (let i = 1; i < trail.length; i++) {
-    const a = trail[i - 1]
-    const b = trail[i]
+    const a = trail[i - 1].point
+    const b = trail[i].point
     const d = Math.hypot(a[0] - b[0], a[2] - b[2])
     if (d < 6) total += d
   }

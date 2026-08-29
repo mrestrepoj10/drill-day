@@ -104,9 +104,9 @@ function summarise(session: TrainingSession) {
   ).length;
   const hints = session.progress.reduce((sum, progress) => sum + progress.hintsUsed, 0);
   const metres = Math.round(
-    session.trail.reduce((totalDistance, point, index) => {
+    session.trail.reduce((totalDistance, { point }, index) => {
       if (index === 0) return 0;
-      const previous = session.trail[index - 1];
+      const previous = session.trail[index - 1].point;
       const distance = Math.hypot(point[0] - previous[0], point[2] - previous[2]);
       return totalDistance + (distance < 6 ? distance : 0);
     }, 0),
