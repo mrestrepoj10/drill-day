@@ -207,7 +207,28 @@ class ViewerTrainingRuntime implements ViewerTraining {
       this.renderer?.clearHighlights()
       this.renderer?.setSelection(null)
       this.syncLearningCues()
-      if (step.startState) await this.applyViewerState(step.startState)
+      if (!step.startState) return
+
+      // Someone who walked in is already standing where the next step wanted
+      // them. Repositioning them anyway — cut or glide — takes the controls
+      // away at the exact moment they succeeded, which is the one moment it
+      // should feel like their own doing. Everything else in the step's
+      // opening state still applies.
+      if (this.walking && step.startState.walkTo && this.standingIn(step.startState.walkTo)) {
+        const opening: ViewerState = { ...step.startState }
+        delete opening.walkTo
+        delete opening.facing
+        await this.applyViewerState(opening)
+        return
+      }
+      await this.applyViewerState(step.startState)
+    }
+
+    /** Whether the learner is already in the room that contains `point`. */
+    private standingIn(point: Vec3): boolean {
+      if (!this.session.room) return false
+      const level = levelAt(point[1], this.world.storeyHeight, this.world.levels)
+      return roomAt(point, this.world.rooms, level) === this.session.room
     }
 
     /**
