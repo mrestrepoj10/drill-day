@@ -13,6 +13,8 @@ interface WorkspaceHeaderProps {
   unseenActivity: number;
   onToggleMission: () => void;
   onToggleActivity: () => void;
+  /** Puts the workspace back to its launch state. */
+  onHome: () => void;
   /** Everything registered on `navigator.modelContext`. */
   tools: RegisteredTool[];
   /** The open step, whose allow list the badge reports. */
@@ -26,6 +28,7 @@ export function WorkspaceHeader({
   unseenActivity,
   onToggleMission,
   onToggleActivity,
+  onHome,
   tools,
   step,
 }: WorkspaceHeaderProps) {
@@ -53,7 +56,20 @@ export function WorkspaceHeader({
           <TooltipContent side="bottom" sideOffset={6}>Mission panel</TooltipContent>
         </Tooltip>
 
-        <Link href="/" className="workspace-brand" aria-label="Drill Day home">
+        {/* There is only one route, so following the href would land on the
+            page we are already on. Home here means the launch screen: drop the
+            drill and put the building back on its overview. Modified clicks
+            still open a fresh copy in a new tab, as a link should. */}
+        <Link
+          href="/"
+          className="workspace-brand"
+          aria-label="Drill Day home"
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            onHome();
+          }}
+        >
           <Box className="workspace-brand-mark" aria-hidden="true" strokeWidth={1.8} />
           <span>Drill Day</span>
         </Link>

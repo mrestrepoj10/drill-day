@@ -617,6 +617,11 @@ export function TrainingDemo() {
   return (
     <div className="app-shell">
       <WorkspaceHeader
+        onHome={() => {
+          pickRole("");
+          setActivityPaneOpen(false);
+          setMissionPaneOpen(true);
+        }}
         tools={tools}
         step={session.status === "running" ? session.step : undefined}
         context={challengeContext}
