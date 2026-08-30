@@ -500,6 +500,7 @@ class ViewerTrainingRuntime implements ViewerTraining {
      */
     async enterWalk(at?: Vec3, facing?: Vec3): Promise<void> {
       const epoch = ++this.walkEpoch
+      const wasWalking = this.walking
       // A camera snap must never be observed as learner movement. Reattach
       // only after the first-person rig is active at the requested position.
       this.detachWalkListener()
@@ -509,7 +510,16 @@ class ViewerTrainingRuntime implements ViewerTraining {
         const look: Vec3 = facing
           ? [facing[0], facing[1] + this.world.eyeHeight, facing[2]]
           : [at[0] + 1, at[1] + this.world.eyeHeight, at[2]]
-        this.handle.rig.setView({ position: eye, target: look })
+        // Someone already on their feet gets walked there. Cutting the camera
+        // to a new spot in the same room reads as a glitch, because every
+        // other metre they have covered was continuous — clearing a step
+        // should not feel like being picked up and put down.
+        if (wasWalking && !prefersReducedMotion()) {
+          await this.glide(eye, look, epoch)
+        } else {
+          this.handle.rig.setView({ position: eye, target: look })
+        }
+        if (epoch !== this.walkEpoch) return
         this.lastSample = null
       }
       if (epoch !== this.walkEpoch) return
@@ -533,6 +543,68 @@ class ViewerTrainingRuntime implements ViewerTraining {
       if (!this.walking) return
       this.walking = false
       this.handle.rig.exitWalk()
+    }
+
+    /**
+     * Eases the first person from where they stand to where the step wants
+     * them, over about half a second.
+     *
+     * The walk listener is detached for the whole glide, so none of it lands
+     * in the learner's route, satisfies the next objective, or counts as a
+     * room they chose to enter. A newer call bumps the epoch and this bails on
+     * its next frame, so two overlapping moves cannot fight over the camera.
+     */
+    private glide(eye: Vec3, look: Vec3, epoch: number): Promise<void> {
+      const from = this.handle.rig.getView()
+      const startEye = from.position
+      const startDir = unit(from.target, from.position)
+      const endDir = unit(look, eye)
+      const startedAt = performance.now()
+
+      return new Promise((resolve) => {
+        let settled = false
+        const finish = (snap: boolean) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          if (snap && epoch === this.walkEpoch) {
+            this.handle.rig.setView({ position: eye, target: look })
+            this.handle.requestRender()
+          }
+          resolve()
+        }
+        // requestAnimationFrame does not fire in a hidden or backgrounded tab.
+        // A tool call must never hang waiting for a frame that is not coming,
+        // so the deadline lands the learner where the step wanted them either
+        // way — the animation is a courtesy, the destination is not.
+        const timer = setTimeout(() => finish(true), GLIDE_MS + 250)
+
+        const frame = () => {
+          if (epoch !== this.walkEpoch) return finish(false)
+          const t = Math.min(1, (performance.now() - startedAt) / GLIDE_MS)
+          const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+          const position: Vec3 = [
+            startEye[0] + (eye[0] - startEye[0]) * e,
+            startEye[1] + (eye[1] - startEye[1]) * e,
+            startEye[2] + (eye[2] - startEye[2]) * e,
+          ]
+          // Lerping the direction rather than the look-at point keeps the turn
+          // even; the two points sit at different distances from the eye.
+          const dir = normalize([
+            startDir[0] + (endDir[0] - startDir[0]) * e,
+            startDir[1] + (endDir[1] - startDir[1]) * e,
+            startDir[2] + (endDir[2] - startDir[2]) * e,
+          ])
+          this.handle.rig.setView({
+            position,
+            target: [position[0] + dir[0], position[1] + dir[1], position[2] + dir[2]],
+          })
+          this.handle.requestRender()
+          if (t >= 1) return finish(false)
+          requestAnimationFrame(frame)
+        }
+        requestAnimationFrame(frame)
+      })
     }
 
     private attachWalkListener(): void {
@@ -656,6 +728,26 @@ class ViewerTrainingRuntime implements ViewerTraining {
 /** Creates the training runtime over a booted viewer handle. */
 export function loadTraining(handle: LocalViewerHandle): Promise<ViewerTraining> {
   return Promise.resolve(new ViewerTrainingRuntime(handle))
+}
+
+/** How long a step takes to walk the learner to where it wants them. */
+const GLIDE_MS = 480
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  )
+}
+
+function unit(to: Vec3, from: Vec3): Vec3 {
+  return normalize([to[0] - from[0], to[1] - from[1], to[2] - from[2]])
+}
+
+function normalize(v: Vec3): Vec3 {
+  const length = Math.hypot(v[0], v[1], v[2]) || 1
+  return [v[0] / length, v[1] / length, v[2] / length]
 }
 
 function distance(a: Vec3, b: Vec3): number {
