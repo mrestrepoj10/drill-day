@@ -29,7 +29,6 @@ import {
 } from "@/components/training/mission-progress";
 import { FloorPlan } from "@/components/training/plan";
 import { SuggestedPrompt } from "@/components/training/suggested-prompt";
-import { ToolAccess } from "@/components/training/tool-access";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -120,7 +119,7 @@ export function TrainingPanel({
 
           {step ? (
             <>
-              <MissionProgress session={session} stages={stages} />
+              <MissionProgress session={session} stages={stages} tools={tools} />
               <MissionControls
                 session={session}
                 onHint={onHint}
@@ -130,7 +129,6 @@ export function TrainingPanel({
                 onReplay={onReplay}
                 replaying={replaying}
               />
-              <ToolAccess tools={tools} session={session} />
             </>
           ) : (
             <MissionDebrief session={session} onReplay={onReplay} replaying={replaying} />

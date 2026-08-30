@@ -503,9 +503,9 @@ const REFUSAL_GUIDANCE: Record<string, string> = {
  * The tools a step's allow list can actually switch off, and the one line that
  * says what withholding each of them teaches.
  *
- * Only tools that route through `guard()` belong here — the Tool access panel
- * reads this to show the learner which half of the toolset is live right now,
- * so a tool listed here that never asks the guard would be a lie on screen.
+ * Only tools that route through `guard()` belong here — the stage's allow-list
+ * chip reads this to tell the learner what is withheld right now, so a tool
+ * listed here that never asks the guard would be a lie on screen.
  */
 export const GUARDED_TOOLS: Record<string, string> = {
   training_list_elements: "Browsing the catalogue would answer a wayfinding question by search.",

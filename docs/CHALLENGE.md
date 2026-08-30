@@ -11,7 +11,7 @@
 ## What the judges should try
 
 1. Start **Leak in Room 214**.
-2. Read the **Tool access** panel before calling anything: it lists all 15 site tools and names the ones this stage has switched off, with the reason.
+2. Open the **agent tools withheld here** chip under the objective before calling anything: it names the tools this stage has switched off and what withholding each one teaches.
 3. Ask the agent: “Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.”
 4. Attempt `training_locate_element` during the navigation step and observe the deterministic refusal in the activity log.
 5. Use the default-on Learning cues to compare the same fair candidate context in the floor plan and the 3D model, then toggle it off and on to see that learner choice enter the activity log.
@@ -27,7 +27,7 @@
 
 - 15 discoverable tools operate against shared, live page state.
 - Tools cover read, action, coaching, answering, replay, and runtime mission authoring.
-- Instructional allow lists demonstrate that tool availability can be part of the simulation—not merely an API wrapper. The Tool access panel states the current stage's allow list before the agent tests it, so the guardrail is legible without a refusal having to happen first.
+- Instructional allow lists demonstrate that tool availability can be part of the simulation—not merely an API wrapper. The stage chip states the current allow list before the agent tests it, so the guardrail is legible without a refusal having to happen first.
 - `training_attempt` makes the marking symmetric: the agent commits to an answer and takes the same deterministic verdict the learner does, in the same log, without being able to clear the step on the learner's behalf.
 - Learner events and each stage's allow list are pushed back to the host as ambient context through `provideContext` where it exists, feature-detected to a silent no-op everywhere else.
 - Strict schemas, annotations, input bounds, async execution, and visible outcomes follow the current proposal.
@@ -57,7 +57,7 @@ The earlier proof of concept lived in a separate local `layer0` workspace. This 
 - GPT Image incident brief and the corresponding environmental pass in the scene.
 - Room signage, hazard thresholds, leak puddle, and equipment detail.
 - Human/scene/agent activity timeline.
-- Tool access panel: the stage's allow list, stated before the agent tests it.
+- Stage allow-list chip: the withheld tools and their reasons, stated before the agent tests them.
 - `training_attempt` and `training_annotate`, so the agent can be marked in public and pin coaching onto the component it is about.
 - Strict WebMCP schemas, guarded tool sets, and clear native/polyfill status.
 - Singular toggleable selection, clickable markers, pointer gesture safety, and selection feedback.
@@ -73,7 +73,7 @@ Repository commit dates are the authoritative record.
 - [ ] Live Vercel URL opens in a private browser session.
 - [ ] Public GitHub repository includes all source, assets, setup instructions, MIT `LICENSE`, and notices.
 - [ ] Native WebMCP browser discovers all 15 tools.
-- [ ] Flagship CTA, Tool access panel, guardrail, hint, agent attempt and pinned note, near miss, correct isolation, replay, and agent-authored drill are smoke-tested.
+- [ ] Flagship CTA, allow-list chip, guardrail, hint, agent attempt and pinned note, near miss, correct isolation, replay, and agent-authored drill are smoke-tested.
 - [ ] Public YouTube demo is under three minutes, has audible English narration, and shows the URL.
 - [ ] Challenge explanation clearly distinguishes the prior proof of concept from post-August-25 work.
 - [ ] Submission is sent before the deadline.

@@ -1,5 +1,7 @@
-import { Check, MapPinned, ShieldAlert } from "lucide-react";
+import { Check, MapPinned } from "lucide-react";
+import type { RegisteredTool } from "@layer0/webmcp";
 import type { Decision, TrainingSession } from "@layer0/viewer-training";
+import { ToolAccessChip } from "@/components/training/tool-access";
 import { cn } from "@/lib/utils";
 
 export interface MissionStageView {
@@ -11,9 +13,11 @@ export interface MissionStageView {
 export function MissionProgress({
   session,
   stages,
+  tools,
 }: {
   session: TrainingSession;
   stages: MissionStageView[];
+  tools: RegisteredTool[];
 }) {
   const activeFeedback = session.step
     ? session.decisions.findLast(
@@ -82,14 +86,10 @@ export function MissionProgress({
                       </div>
                     ) : null}
 
-                    {session.step?.allowedTools ? (
-                      // A guardrail is a feature, so it gets a designed chip,
-                      // not a bare warning line.
-                      <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-warning/25 bg-warning/10 px-2 py-1 text-[11px] font-medium leading-[1.4] text-warning">
-                        <ShieldAlert className="size-3.5 shrink-0" aria-hidden="true" />
-                        <span>Search is disabled for this stage</span>
-                      </div>
-                    ) : null}
+                    {/* A guardrail is a feature, so it gets a designed chip —
+                        and the chip opens the actual allow list rather than
+                        summarising it as "search is off". */}
+                    <ToolAccessChip tools={tools} step={session.step} />
 
                     {activeFeedback?.verdict ? (
                       <StageFeedback
