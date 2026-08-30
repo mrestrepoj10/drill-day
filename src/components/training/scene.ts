@@ -972,7 +972,10 @@ export class TrainingScene implements TrainingRenderer {
     const xray = tone === "trace" || tone === "ask"
     const [sx, sy, sz] = element.size
 
-    if (/valve|isolator/i.test(element.name)) {
+    // Match the id, not the prose. "1F branch isolation" is a valve and reads
+    // as one on a drawing, but it contains neither "valve" nor "isolator", so
+    // a name test quietly drew the two valves this drill turns on as boxes.
+    if (/-VLV-/.test(element.id) || /valve|isolator/i.test(element.name)) {
       return {
         geometry: "valve",
         position: element.position,

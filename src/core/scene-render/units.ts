@@ -262,33 +262,58 @@ function merged(parts: GeometryBuffers[]): GeometryBuffers {
 }
 
 /**
- * An isolation valve that reads as a valve: a pipe run through the body, a
- * round bonnet, and a handwheel on a stem. Fits the unit cube; an element's
- * `size` stretches the whole assembly.
+ * A flanged gate valve, the way one actually sits on a branch off a riser: the
+ * pipe runs through a bolted body, a bonnet carries the stem up out of it, and
+ * a handwheel sits on top.
+ *
+ * Everything is solid. The earlier version drew the flanges and the handwheel
+ * as line rings, which read as CAD ghosting hovering around a blob rather than
+ * as hardware — and it never needed to be lines, because decorative parts are
+ * already excluded from picking.
+ *
+ * Fits the unit cube with the handwheel at the top; an element's `size`
+ * stretches the whole assembly.
  */
 export function unitValve(): GeometryBuffers {
-  const pipe = placed(unitCylinder(12), [0.34, 1, 0.34], [0, 0, 0])
-  // The pipe runs along X: reuse the +Y cylinder by swapping axes in scale via
-  // a rotated copy — cheaper to just author it as a stretched X-aligned box of
-  // revolution: swap coordinates.
-  const px = pipe.positions
-  for (let i = 0; i < px.length; i += 3) {
-    const y = px[i + 1]
-    px[i + 1] = px[i]
-    px[i] = y
-  }
-  const nx = pipe.normals
-  for (let i = 0; i < nx.length; i += 3) {
-    const y = nx[i + 1]
-    nx[i + 1] = nx[i]
-    nx[i] = y
-  }
+  // The parts on the pipe axis are authored upright and tipped over together,
+  // so their offsets read as "along the pipe" while being written as heights.
+  const inline = tippedOntoX(
+    merged([
+      placed(unitCylinder(14), [0.26, 1, 0.26], [0, 0, 0]), // pipe through the body
+      placed(unitCylinder(16), [0.46, 0.42, 0.46], [0, 0, 0]), // body
+      placed(unitCylinder(16), [0.56, 0.06, 0.56], [0, 0.26, 0]), // flange
+      placed(unitCylinder(16), [0.56, 0.06, 0.56], [0, -0.26, 0]), // flange
+    ]),
+  )
+
   return merged([
-    pipe,
-    placed(unitSphere(8, 12), [0.56, 0.56, 0.56], [0, 0, 0]), // body
-    placed(unitCylinder(10), [0.1, 0.45, 0.1], [0, 0.3, 0]), // stem
-    placed(torusBuffers(0.5, 0.09, 14, 6), [0.42, 0.42, 0.42], [0, 0.48, 0]), // handwheel
+    inline,
+    placed(unitCylinder(14), [0.3, 0.2, 0.3], [0, 0.26, 0]), // bonnet
+    placed(unitCylinder(10), [0.15, 0.07, 0.15], [0, 0.38, 0]), // gland nut
+    placed(unitCylinder(8), [0.055, 0.22, 0.055], [0, 0.36, 0]), // stem
+    placed(torusBuffers(0.5, 0.07, 20, 8), [0.42, 0.42, 0.42], [0, 0.46, 0]), // handwheel
+    placed(unitCylinder(8), [0.09, 0.05, 0.09], [0, 0.46, 0]), // wheel hub
   ])
+}
+
+/**
+ * Lays an upright assembly on its side, along +X.
+ *
+ * A rotation, not an axis swap: swapping two axes mirrors the geometry, which
+ * reverses every triangle's winding and leaves the faces culled from the side
+ * you are looking at.
+ */
+function tippedOntoX(buffers: GeometryBuffers): GeometryBuffers {
+  const positions = buffers.positions.slice()
+  const normals = buffers.normals.slice()
+  for (const values of [positions, normals]) {
+    for (let i = 0; i < values.length; i += 3) {
+      const x = values[i]
+      values[i] = values[i + 1]
+      values[i + 1] = -x
+    }
+  }
+  return { positions, normals, indices: buffers.indices.slice() }
 }
 
 /**

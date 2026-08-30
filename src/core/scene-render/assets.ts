@@ -335,51 +335,35 @@ export function switchboardParts(size: Vec3): readonly AssetPart[] {
 }
 
 /**
- * A stem, handwheel and flange outlines around a still-single semantic valve
- * body. All prominent trim is line geometry so it cannot steal the hit ray.
+ * The one thing the valve geometry cannot carry: its identity.
+ *
+ * Stem, bonnet, flanges and handwheel now live in the valve mesh itself, so all
+ * that is left here is the stamped tag every real isolation valve wears — which
+ * is what the learner is being taught to read, rather than to guess a valve by
+ * its position on the bracket.
  */
 export function valveTrimParts(size: Vec3, color: number): readonly AssetPart[] {
-  const wheel = Math.max(size[0], size[2]) * 1.45
+  const across = Math.max(size[0], size[2])
   return [
-    {
-      key: "stem",
-      geometry: "cylinder",
-      offset: [0, size[1] * 0.62, 0],
-      size: [0.075, size[1] * 0.55, 0.075],
-      color: 0x33383c,
-      metal: true,
-    },
-    {
-      key: "handwheel",
-      geometry: "asset:ring-xz",
-      offset: [0, size[1] * 1.02, 0],
-      size: [wheel, 1, wheel],
-      color: 0x25292c,
-      lines: true,
-    },
-    {
-      key: "flange-west",
-      geometry: "asset:ring-yz",
-      offset: [-size[0] * 0.64, 0, 0],
-      size: [1, size[1] * 1.08, size[2] * 1.08],
-      color,
-      lines: true,
-    },
-    {
-      key: "flange-east",
-      geometry: "asset:ring-yz",
-      offset: [size[0] * 0.64, 0, 0],
-      size: [1, size[1] * 1.08, size[2] * 1.08],
-      color,
-      lines: true,
-    },
+    // Hung off the side of the body, clear of the flanges on the pipe axis.
     {
       key: "tag",
-      geometry: "boxEdges",
-      offset: [wheel * 0.52, size[1] * 0.95, 0],
-      size: [wheel * 0.34, wheel * 0.22, 0.025],
-      color: 0xd8dde0,
-      lines: true,
+      geometry: "box",
+      offset: [0, size[1] * 0.1, across * 0.36],
+      size: [across * 0.26, across * 0.17, 0.012],
+      color: 0xc3cace,
+      metal: true,
+    },
+    // A collar in the service colour around the bonnet: the same identification
+    // language as the pipe bands, at the point of use. Sized to sit proud of
+    // the bonnet and inside the handwheel, so it reads as a band on the valve
+    // rather than as another disc competing with the wheel.
+    {
+      key: "id-collar",
+      geometry: "cylinder",
+      offset: [0, size[1] * 0.28, 0],
+      size: [across * 0.42, size[1] * 0.06, across * 0.42],
+      color,
     },
   ]
 }
