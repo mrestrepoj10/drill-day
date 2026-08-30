@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Activity, Box, PanelLeft } from "lucide-react";
 import type { RegisteredTool } from "@layer0/webmcp";
 import type { TrainingStep } from "@layer0/viewer-training";
-import { ToolAccessBadge } from "@/components/training/tool-access";
+import { AgentToolsBadge } from "@/components/training/tool-access";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -15,7 +15,7 @@ interface WorkspaceHeaderProps {
   onToggleActivity: () => void;
   /** Everything registered on `navigator.modelContext`. */
   tools: RegisteredTool[];
-  /** The open step, whose allow list the guardrail badge reports. */
+  /** The open step, whose allow list the badge reports. */
   step: TrainingStep | undefined;
 }
 
@@ -64,7 +64,7 @@ export function WorkspaceHeader({
       <nav className="workspace-navbar-actions" aria-label="Workspace utilities">
         {/* The guardrail is the thing this page is arguing for, so it sits on
             the one surface that is present at every width and pane state. */}
-        <ToolAccessBadge tools={tools} step={step} />
+        <AgentToolsBadge tools={tools} step={step} />
 
         <Button
           type="button"
