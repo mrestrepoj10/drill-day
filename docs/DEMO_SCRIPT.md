@@ -24,6 +24,10 @@ Run **Agent takes the verdict**. The agent commits to a plausible wrong answer, 
 
 Then make the call yourself: select the split drop, follow the inline directions to the riser cupboard, take the Room 214 terminal valve as a near miss, and finish on the first-floor chilled-water isolation. Show the debrief and its Replay action.
 
+## Optional cold open — the agent working alone
+
+If the recording needs a moment where nobody is typing, run **Let it work alone** from the start screen before the drill. One instruction, eight calls: it browses the chilled-water system, traces the server room back to the chiller, and pins three notes onto the plant in the 3D scene. Nothing it writes is an answer to any drill — it is the briefing you would get at a shift handover, and starting a mission clears it.
+
 ## 2:05–2:40 — authored, and close
 
 > The last thing it can do is write the next drill. It browses the fire equipment that actually exists in this model, composes a mission from checked IDs, and launches it in the same scene. A hallucinated element id is rejected before a learner ever sees the exercise.

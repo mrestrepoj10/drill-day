@@ -12,18 +12,28 @@ import { Button } from "@/components/ui/button";
 export const SUGGESTED_PROMPT =
   "Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.";
 
-export function SuggestedPrompt() {
+/**
+ * The other half of the pitch: one instruction that keeps the agent busy on its
+ * own for half a minute. WebMCP gives a page no way to speak first, so the way
+ * to show an agent working rather than answering is to make a single prompt
+ * worth many calls.
+ */
+export const AUDIT_PROMPT =
+  "Walk the chilled-water system in this building and brief me the way you would at a shift handover. " +
+  "Pin a note on anything I should know before I touch a valve.";
+
+export function SuggestedPrompt({ prompt = SUGGESTED_PROMPT }: { prompt?: string }) {
   const [copied, setCopied] = useState(false);
 
   const copyPrompt = async () => {
-    await navigator.clipboard.writeText(SUGGESTED_PROMPT);
+    await navigator.clipboard.writeText(prompt);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
 
   return (
     <>
-      <p className="text-pretty text-[13px] leading-[1.5] text-foreground">{SUGGESTED_PROMPT}</p>
+      <p className="text-pretty text-[13px] leading-[1.5] text-foreground">{prompt}</p>
       <Button
         type="button"
         variant="ghost"

@@ -19,7 +19,8 @@
 7. Inside Room 214, run **Agent takes the verdict**: the agent answers the step itself with `training_attempt`, receives the same authored near-miss diagnosis a learner would, pins a note onto the component with `training_annotate`, and the step stays open — the verdict is real and deliberately not binding.
 8. After identifying the leak, follow the inline wayfinding guidance to the riser cupboard. Choose the downstream terminal valve and compare its near-miss diagnosis with the correct floor isolation.
 9. Complete the mission and review the debrief card: final action, session metrics, and primary replay path.
-10. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
+10. From the start screen, run **Let it work alone**: one instruction, eight tool calls, three notes pinned into the 3D scene — the agent browsing, tracing and annotating with no further input. WebMCP gives a page no way to speak first, so this is what agent initiative looks like inside the standard: one prompt worth many calls.
+11. Run **Agent-authored drill** to show that the agent can browse real building elements, construct a mission with checked IDs, and launch it in the same scene.
 
 ## Judging alignment
 

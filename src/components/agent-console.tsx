@@ -18,7 +18,7 @@ import type { ModelContextFlavor, RegisteredTool, ToolCall } from "@layer0/webmc
 import type { Decision, TrainingSession } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, ROOMS } from "@/lib/training/facility";
 import { Button } from "@/components/ui/button";
-import { SuggestedPrompt } from "@/components/training/suggested-prompt";
+import { AUDIT_PROMPT, SuggestedPrompt } from "@/components/training/suggested-prompt";
 import {
   Collapsible,
   CollapsibleContent,
@@ -208,6 +208,20 @@ export function AgentConsole({
   );
 }
 
+/** One paste-able instruction, with a plain-language label above it. */
+function PromptOption({ label, prompt }: { label: string; prompt: string | undefined }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase leading-[1.4] tracking-[0.08em] text-text-tertiary">
+        {label}
+      </p>
+      <div className="mt-1">
+        <SuggestedPrompt prompt={prompt} />
+      </div>
+    </div>
+  );
+}
+
 function ActivityFeed({
   events,
   drills,
@@ -242,8 +256,15 @@ function ActivityFeed({
               Try with ChatGPT
               <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
             </CollapsibleTrigger>
-            <CollapsibleContent className="px-4 pb-3">
-              <SuggestedPrompt />
+            <CollapsibleContent className="space-y-3 px-4 pb-3">
+              <PromptOption
+                label="Coach me, but do not give it away"
+                prompt={undefined}
+              />
+              <PromptOption
+                label="Let it work on its own"
+                prompt={AUDIT_PROMPT}
+              />
             </CollapsibleContent>
           </Collapsible>
           <div role="log" aria-live="polite" className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
@@ -267,8 +288,9 @@ function ActivityFeed({
             </p>
             <div className="mt-4 rounded-md border border-border p-3 text-left">
               <h2 className="text-[12px] font-semibold leading-[1.4]">Try with ChatGPT</h2>
-              <div className="mt-1.5">
-                <SuggestedPrompt />
+              <div className="mt-1.5 space-y-3">
+                <PromptOption label="Coach me, but do not give it away" prompt={undefined} />
+                <PromptOption label="Let it work on its own" prompt={AUDIT_PROMPT} />
               </div>
             </div>
           </div>

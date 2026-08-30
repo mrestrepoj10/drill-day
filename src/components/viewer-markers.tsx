@@ -49,16 +49,37 @@ export function ViewerMarkers({
     const loop = () => {
       const stage = getStage();
       if (stage) {
+        // Read every position and size first, write every transform after.
+        // Interleaving them would force a layout per marker, on a frame where
+        // the 3D canvas is already painting.
+        const boxes: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
         for (const m of latest.current) {
           const el = nodes.current.get(m.id);
           if (!el) continue;
           const p = stage.project(m.point);
-          if (p) {
-            el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) translate(-50%, -100%)`;
-            el.style.visibility = "visible";
-          } else {
+          if (!p) {
             el.style.visibility = "hidden";
+            continue;
           }
+          boxes.push({ el, x: p.x, y: p.y, w: el.offsetWidth, h: el.offsetHeight });
+        }
+
+        // Labels are anchored bottom-centre at their anchor point, so two
+        // components a few metres apart can land on top of each other. Place
+        // the lowest first and stack anything that collides above it, which
+        // keeps every label readable and each one still nearest its own part.
+        boxes.sort((a, b) => b.y - a.y);
+        const placed: typeof boxes = [];
+        for (const box of boxes) {
+          for (const done of placed) {
+            const apart = Math.abs(done.x - box.x) >= (done.w + box.w) / 2;
+            if (apart) continue;
+            const overlaps = box.y - box.h < done.y && box.y > done.y - done.h;
+            if (overlaps) box.y = done.y - done.h - 6;
+          }
+          placed.push(box);
+          box.el.style.transform = `translate3d(${box.x}px, ${box.y}px, 0) translate(-50%, -100%)`;
+          box.el.style.visibility = "visible";
         }
       }
       raf = requestAnimationFrame(loop);

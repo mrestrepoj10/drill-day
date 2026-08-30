@@ -89,6 +89,49 @@ const DRILLS: Drill[] = [
     ],
   },
   {
+    label: "Let it work alone",
+    hint: "One instruction, eight calls: it browses, traces the system, and pins its own notes. Best from the start screen.",
+    // The long autonomous run. Nothing here names a mission answer — it is a
+    // pre-drill briefing on how the building is fed, which is the reasoning the
+    // flagship goes on to test rather than a shortcut past it.
+    steps: [
+      { tool: "training_list_elements", input: { system: "chilled water" }, pause: 800 },
+      { tool: "training_trace_system", input: { id: "CHW-CRAC-217" }, pause: 800 },
+      { tool: "training_inspect_element", input: { id: "CHW-VLV-MAIN" }, pause: 650 },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-VLV-MAIN",
+          note: "Closes chilled water for the whole building, server room included. Last resort, never the first move.",
+        },
+        pause: 800,
+      },
+      { tool: "training_inspect_element", input: { id: "CHW-CRAC-217" }, pause: 650 },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-CRAC-217",
+          note: "Server room cooling, fed from the same chilled water as the rest of the floor. This is the thing you are protecting.",
+        },
+        pause: 800,
+      },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-RSR-01",
+          note: "Every service upstairs comes up this riser, so this is where one floor can be isolated on its own.",
+        },
+        pause: 800,
+      },
+      {
+        tool: "training_say",
+        input: {
+          text: "Briefing done. One chiller, one riser, and a server room that cannot lose cooling — three notes pinned in the scene where the plant is.",
+        },
+      },
+    ],
+  },
+  {
     label: "Agent-authored drill",
     hint: "Browse real fire assets, then compose and launch a grounded two-step exercise.",
     steps: [
@@ -483,7 +526,7 @@ export function TrainingDemo() {
         children: note ? (
           <>
             <b className="block">{element.name}</b>
-            <span className="mt-0.5 block max-w-52 text-pretty text-[11px] font-normal leading-[1.45] opacity-90">
+            <span className="mt-0.5 block max-w-44 text-pretty text-[11px] font-normal leading-[1.45] opacity-90">
               {note}
             </span>
           </>
