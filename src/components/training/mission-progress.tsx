@@ -1,4 +1,4 @@
-import { Check, MapPinned, ShieldAlert } from "lucide-react";
+import { Check, MapPinned } from "lucide-react";
 import type { Decision, TrainingSession } from "@layer0/viewer-training";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +63,10 @@ export function MissionProgress({
 
                 {current ? (
                   <div className="surface-pop">
-                    <h2 className="mt-1 text-pretty text-[18px] font-semibold leading-[1.35] tracking-[-0.02em]">
+                    {/* One notch below the mission title: the title names the
+                        lesson, the prompt is an instruction — same voice,
+                        smaller room. */}
+                    <h2 className="mt-1.5 text-pretty text-[15px] font-medium leading-[1.45] tracking-[-0.01em] text-foreground/95">
                       {stage.prompt}
                     </h2>
 
@@ -76,13 +79,6 @@ export function MissionProgress({
                             {session.step.guidance}
                           </p>
                         </div>
-                      </div>
-                    ) : null}
-
-                    {session.step?.allowedTools ? (
-                      <div className="mt-3 flex items-center gap-2 text-[11px] leading-[1.4] text-warning">
-                        <ShieldAlert className="size-3.5 shrink-0" aria-hidden="true" />
-                        <span>Search is disabled for this stage</span>
                       </div>
                     ) : null}
 

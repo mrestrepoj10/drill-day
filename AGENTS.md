@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Drill Day
 
-Drill Day is our entry for the **WebMCP challenge**. It is a facilities-training demo where a learner and an AI agent share the same live 3D building: the page exposes 13 `training_*` site tools on `navigator.modelContext` following the **latest WebMCP draft spec** (https://webmachinelearning.github.io/webmcp/), so an agentic browser like ChatGPT can read the scene, coach the learner, and even author new drills — against the exact state the human is looking at.
+Drill Day is our entry for the **WebMCP challenge**. It is a facilities-training demo where a learner and an AI agent share the same live 3D building: the page exposes 15 `training_*` site tools on `navigator.modelContext` following the **latest WebMCP draft spec** (https://webmachinelearning.github.io/webmcp/), so an agentic browser like ChatGPT can read the scene, coach the learner, and even author new drills — against the exact state the human is looking at.
 
 The rest of this file is good defaults, not hard rules. The developer's instructions override anything here.
 
@@ -34,7 +34,7 @@ The rest of this file is good defaults, not hard rules. The developer's instruct
 
 ## How it works
 
-`src/core/webmcp` registers tools on `navigator.modelContext` and journals every call. `src/lib/training/tools.ts` declares the 13 tools (constrained JSON Schemas, truthful `readOnlyHint`s, mission-level allow lists). `@layer0/viewer-training` is the session engine — missions, verdicts, guardrails, replay. `@layer0/viewer` + `@layer0/scene-render` wrap the Autodesk Viewer (LMV `GuiViewer3D`). React subscribes to the session via `useSyncExternalStore`; nothing owns state twice.
+`src/core/webmcp` registers tools on `navigator.modelContext` and journals every call. `src/lib/training/tools.ts` declares the 15 tools (constrained JSON Schemas, truthful `readOnlyHint`s, mission-level allow lists). `@layer0/viewer-training` is the session engine — missions, verdicts, guardrails, replay. `@layer0/viewer` + `@layer0/scene-render` are a plain three.js viewport (renderer, camera rig with orbit/walk modes, on-demand render loop) and the stage of shared unit geometries drawn on it. React subscribes to the session via `useSyncExternalStore`; nothing owns state twice.
 
 ## Where code lives
 
@@ -54,7 +54,7 @@ The rest of this file is good defaults, not hard rules. The developer's instruct
 - **shadcn first** (`components.json`, radix-nova style, unified `radix-ui` package). A raw `button`/`input`/`select` where a shadcn primitive exists is a defect.
 - **Tokens only, one meaning per color**: monochrome for state and chrome, `--interactive` blue for links and agent accents, `--warning`/`--success`/`--destructive` for verdicts. New colors go through `globals.css` tokens (`color-mix` for tints), never inline hexes.
 - Occasional surfaces (toasts, verdicts, feed rows) enter through `.surface-pop`; nothing pops in. Respect `prefers-reduced-motion` (drawers cross-fade).
-- The LMV toolbar docks bottom-center (~60px tall). Keep viewer overlays clear of it.
+- The viewer draws no chrome of its own; overlays own the whole canvas, but keep the centre clear for the model.
 
 ## Gotchas
 

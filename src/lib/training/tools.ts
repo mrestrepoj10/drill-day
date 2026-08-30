@@ -115,6 +115,10 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
             why: d.verdict?.diagnosis,
           })),
           coaching: s.coaching.slice(-4),
+          pinnedNotes: s.annotations.map((a) => ({
+            element: t.element(a.id)?.name ?? a.id,
+            note: a.note,
+          })),
         }
       },
     },
@@ -386,6 +390,50 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       },
     },
     {
+      name: "training_attempt",
+      title: "Answer it yourself",
+      description:
+        "Commit to an answer and be marked on it. The same deterministic marking a learner's click " +
+        "gets — correct, near miss with the authored reason it is wrong, or plainly wrong — recorded " +
+        "in the shared log under your name. It does not clear the step: a coach that could finish the " +
+        "drill on the learner's behalf would end it. Use it to show your reasoning and take the verdict.",
+      inputSchema: schema({ id: { type: "string", maxLength: 80 } }, ["id"]),
+      execute: ({ id }: { id: string }) => {
+        const t = guard("training_attempt")
+        const result = t.attempt(id)
+        if (result.action === "blocked") throw new Error(result.message)
+        const verdict = result.verdict!
+        return {
+          answered: t.element(id)?.name ?? id,
+          verdict: verdict.kind,
+          message: verdict.message,
+          why: verdict.diagnosis,
+          binding: false,
+          note: "Recorded against you, not the learner. They still have to make the call.",
+        }
+      },
+    },
+    {
+      name: "training_annotate",
+      title: "Pin a note in the scene",
+      description:
+        "Pins one sentence onto an element, where the learner is already looking, instead of adding " +
+        "another line to a panel they have to read. One note per element; they clear when the step " +
+        "changes. Pass clearAll to take them all down at once.",
+      inputSchema: schema({
+        id: { type: "string", maxLength: 80 },
+        note: { type: "string", minLength: 1, maxLength: 220 },
+        clearAll: { type: "boolean", description: "Remove every pinned note instead of adding one" },
+      }),
+      execute: ({ id, note, clearAll }: { id?: string; note?: string; clearAll?: boolean }) => {
+        const t = guard("training_annotate")
+        if (clearAll) return { cleared: t.clearAnnotations() }
+        if (!id || !note) throw new Error("pass both id and note, or clearAll: true")
+        const pinned = t.annotate(id, note)
+        return { pinnedTo: t.element(id)?.name ?? id, note: pinned.note }
+      },
+    },
+    {
       name: "training_replay",
       title: "Replay the session",
       description:
@@ -444,6 +492,33 @@ const REFUSAL_GUIDANCE: Record<string, string> = {
     "training_say or training_give_hint.",
   training_replay:
     "Do not retry. Replay is for after a decision is made. Keep coaching the current step.",
+  training_attempt:
+    "Do not retry. This step is not asking for a component. Coach the learner through it with " +
+    "training_say, or spend a hint.",
+  training_annotate:
+    "Do not retry. Notes are switched off here. Say it with training_say instead.",
+}
+
+/**
+ * The tools a step's allow list can actually switch off, and the one line that
+ * says what withholding each of them teaches.
+ *
+ * Only tools that route through `guard()` belong here — the navbar's Agent
+ * tools badge reads this to tell the learner what is withheld right now, so a
+ * tool listed here that never asks the guard would be a lie on screen.
+ */
+export const GUARDED_TOOLS: Record<string, string> = {
+  training_list_elements: "Browsing the catalogue would answer a wayfinding question by search.",
+  training_trace_system: "Following the pipe for them is the reasoning this step is testing.",
+  training_locate_element: "Putting the camera on the answer is the whole shortcut this step exists to prevent.",
+  training_give_hint: "Hints are spent, not given — a step can close them off entirely.",
+  training_say: "A step can ask for silence and let the learner work.",
+  training_set_view: "Moving the learner would walk the route for them.",
+  training_cut_section: "Cutting the building open can give away what is above the ceiling.",
+  training_advance: "Skipping a step the learner has not earned is not teaching.",
+  training_replay: "Replay belongs after a decision, not instead of one.",
+  training_attempt: "A step that is not asking for a component has nothing to answer.",
+  training_annotate: "A step can ask for an unmarked model.",
 }
 
 const SEARCHLESS = [
@@ -453,6 +528,10 @@ const SEARCHLESS = [
   "training_give_hint",
   "training_say",
   "training_cut_section",
+  // Neither of these is a shortcut past the exercise: one takes a verdict, the
+  // other writes a sentence onto something the learner can already see.
+  "training_attempt",
+  "training_annotate",
 ]
 
 /**
@@ -512,11 +591,11 @@ function compile(input: AuthoredMission, t: ViewerTraining): Mission {
   }
 }
 
-function pathLength(trail: [number, number, number][]): number {
+function pathLength(trail: { at: number; point: [number, number, number] }[]): number {
   let total = 0
   for (let i = 1; i < trail.length; i++) {
-    const a = trail[i - 1]
-    const b = trail[i]
+    const a = trail[i - 1].point
+    const b = trail[i].point
     const d = Math.hypot(a[0] - b[0], a[2] - b[2])
     if (d < 6) total += d
   }

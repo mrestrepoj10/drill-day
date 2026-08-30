@@ -335,51 +335,215 @@ export function switchboardParts(size: Vec3): readonly AssetPart[] {
 }
 
 /**
- * A stem, handwheel and flange outlines around a still-single semantic valve
- * body. All prominent trim is line geometry so it cannot steal the hit ray.
+ * The one thing the valve geometry cannot carry: its identity.
+ *
+ * Stem, bonnet, flanges and handwheel now live in the valve mesh itself, so all
+ * that is left here is the stamped tag every real isolation valve wears — which
+ * is what the learner is being taught to read, rather than to guess a valve by
+ * its position on the bracket.
  */
 export function valveTrimParts(size: Vec3, color: number): readonly AssetPart[] {
-  const wheel = Math.max(size[0], size[2]) * 1.45
+  const across = Math.max(size[0], size[2])
   return [
+    // Hung off the side of the body, clear of the flanges on the pipe axis.
     {
-      key: "stem",
+      key: "tag",
+      geometry: "box",
+      offset: [0, size[1] * 0.1, across * 0.36],
+      size: [across * 0.26, across * 0.17, 0.012],
+      color: 0xc3cace,
+      metal: true,
+    },
+    // A collar in the service colour around the bonnet: the same identification
+    // language as the pipe bands, at the point of use. Sized to sit proud of
+    // the bonnet and inside the handwheel, so it reads as a band on the valve
+    // rather than as another disc competing with the wheel.
+    {
+      key: "id-collar",
       geometry: "cylinder",
-      offset: [0, size[1] * 0.62, 0],
-      size: [0.075, size[1] * 0.55, 0.075],
-      color: 0x33383c,
+      offset: [0, size[1] * 0.28, 0],
+      size: [across * 0.42, size[1] * 0.06, across * 0.42],
+      color,
+    },
+  ]
+}
+
+/**
+ * An end-suction pump set the way a plant room actually holds one: a concrete
+ * inertia base, the volute with its suction/discharge flanges, and a motor
+ * lying along the shaft. `size` is the catalogue element's bounding box; the
+ * semantic body stays pickable inside these decorations.
+ */
+export function pumpTrimParts(size: Vec3): readonly AssetPart[] {
+  const [w, h, d] = size
+  const baseH = 0.15
+  return [
+    // Concrete inertia base, 150 mm larger each side (Kinetics-style).
+    {
+      key: "inertia-base",
+      geometry: "box",
+      offset: [0, -h / 2 + baseH / 2, 0],
+      size: [w + 0.3, baseH, d + 0.3],
+      color: 0xb8b8b8,
+    },
+    // Motor: a horizontal cylinder along the pump axis.
+    {
+      key: "motor",
+      geometry: "cylinder",
+      offset: [w * 0.18, -h / 2 + baseH + 0.32, 0],
+      size: [0.34, w * 0.55, 0.34],
+      direction: [1, 0, 0],
+      color: 0x3a5a40,
+      metal: true,
+    },
+    // Volute casing at the drive end.
+    {
+      key: "volute",
+      geometry: "sphere",
+      offset: [-w * 0.28, -h / 2 + baseH + 0.3, 0],
+      size: [0.5, 0.52, 0.44],
+      color: 0x2f4f38,
+      metal: true,
+    },
+    // Discharge riser out of the volute.
+    {
+      key: "discharge",
+      geometry: "cylinder",
+      offset: [-w * 0.28, -h / 2 + baseH + 0.72, 0],
+      size: [0.16, 0.7, 0.16],
+      color: 0xc0c4c7,
+      metal: true,
+    },
+  ]
+}
+
+/**
+ * A pressure vessel: red expansion vessels and silver buffer vessels are the
+ * two objects everyone recognises in a plant room photograph.
+ */
+export function vesselParts({
+  diameter,
+  height,
+  color,
+}: {
+  diameter: number
+  height: number
+  color: number
+}): readonly AssetPart[] {
+  const parts: AssetPart[] = [
+    {
+      key: "shell",
+      geometry: "cylinder",
+      offset: [0, height / 2 + 0.18, 0],
+      size: [diameter, height, diameter],
+      color,
       metal: true,
     },
     {
-      key: "handwheel",
-      geometry: "asset:ring-xz",
-      offset: [0, size[1] * 1.02, 0],
-      size: [wheel, 1, wheel],
-      color: 0x25292c,
-      lines: true,
-    },
-    {
-      key: "flange-west",
-      geometry: "asset:ring-yz",
-      offset: [-size[0] * 0.64, 0, 0],
-      size: [1, size[1] * 1.08, size[2] * 1.08],
+      key: "dome",
+      geometry: "sphere",
+      offset: [0, height + 0.18, 0],
+      size: [diameter, diameter * 0.55, diameter],
       color,
-      lines: true,
+      metal: true,
+    },
+  ]
+  for (const [key, dx, dz] of [
+    ["leg-a", -0.3, -0.3],
+    ["leg-b", 0.3, -0.3],
+    ["leg-c", 0, 0.36],
+  ] as const) {
+    parts.push({
+      key,
+      geometry: "box",
+      offset: [dx * diameter, 0.09, dz * diameter],
+      size: [0.06, 0.18, 0.06],
+      color: 0x44494d,
+      metal: true,
+    })
+  }
+  return parts
+}
+
+/**
+ * BS EN 3 extinguisher identity: the body is safety red; the agent is named by
+ * a colour band across the shoulder (CO2 black, foam cream, powder blue,
+ * water plain red), and CO2 carries its swan-neck horn. A wall bracket plate
+ * ties it to the wall the way BS 5306-8 hangs it.
+ */
+export function extinguisherTrimParts(
+  size: Vec3,
+  type: string | undefined,
+  wall: 1 | -1,
+): readonly AssetPart[] {
+  const band: Record<string, number> = {
+    co2: 0x101010,
+    foam: 0xf1e4c0,
+    powder: 0x1e6aa8,
+    "wet chemical": 0xf4c400,
+  }
+  const bandColor = band[(type ?? "").toLowerCase()]
+  const [sx, sy, sz] = size
+  const parts: AssetPart[] = [
+    // Bracket plate against the wall behind the cylinder.
+    {
+      key: "bracket",
+      geometry: "box",
+      offset: [0, sy * 0.18, wall * (sz * 0.62)],
+      size: [0.1, 0.34, 0.03],
+      color: 0x53595e,
+      metal: true,
+    },
+    // Black handle/valve assembly on top.
+    {
+      key: "valve",
+      geometry: "box",
+      offset: [0.05, sy * 0.62, 0],
+      size: [0.2, 0.07, 0.05],
+      color: 0x17191b,
+    },
+  ]
+  if (bandColor !== undefined) {
+    parts.push({
+      key: "agent-band",
+      geometry: "cylinder",
+      offset: [0, sy * 0.3, 0],
+      size: [sx * 0.66, sy * 0.22, sz * 0.66],
+      color: bandColor,
+      unlit: true,
+    })
+  }
+  if ((type ?? "").toLowerCase() === "co2") {
+    parts.push({
+      key: "horn",
+      geometry: "cylinder",
+      offset: [-sx * 0.5, sy * 0.34, 0],
+      size: [0.1, sy * 0.42, 0.16],
+      direction: [-0.35, 1, 0],
+      color: 0x0d0f10,
+    })
+  }
+  return parts
+}
+
+/** A manual call point: the red 87 mm box at 1.4 m beside every exit door. */
+export function callPointParts(wall: 1 | -1): readonly AssetPart[] {
+  return [
+    {
+      key: "box",
+      geometry: "box",
+      offset: [0, 0, wall * 0.05],
+      size: [0.09, 0.09, 0.06],
+      color: 0xc8102e,
+      unlit: true,
     },
     {
-      key: "flange-east",
-      geometry: "asset:ring-yz",
-      offset: [size[0] * 0.64, 0, 0],
-      size: [1, size[1] * 1.08, size[2] * 1.08],
-      color,
-      lines: true,
-    },
-    {
-      key: "tag",
-      geometry: "boxEdges",
-      offset: [wheel * 0.52, size[1] * 0.95, 0],
-      size: [wheel * 0.34, wheel * 0.22, 0.025],
-      color: 0xd8dde0,
-      lines: true,
+      key: "element",
+      geometry: "box",
+      offset: [0, -0.005, wall * 0.085],
+      size: [0.05, 0.04, 0.012],
+      color: 0xe8ecee,
+      unlit: true,
     },
   ]
 }

@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ELEMENTS, FOOTPRINT, ROOMS, SYSTEM_COLOR } from "@/lib/training/facility";
 import type { Vec3 } from "@layer0/viewer-training";
 
 const PAD = 3;
+/** How long a walked point stays on the plan before it has fully faded. */
+const TRAIL_LIFE_MS = 60_000;
+/** The last stretch of that life over which it fades out. */
+const TRAIL_FADE_MS = 25_000;
 
 /**
  * The related drawing.
@@ -29,7 +34,7 @@ export function FloorPlan({
   highlighted: string[];
   cueElements: string[];
   cueRooms: string[];
-  trail: Vec3[];
+  trail: { at: number; point: Vec3 }[];
   onPickRoom?: (roomId: string) => void;
 }) {
   const w = FOOTPRINT.x + PAD * 2;
@@ -37,8 +42,20 @@ export function FloorPlan({
   const rooms = ROOMS.filter((r) => r.level === level);
   const markedIds = new Set([...cueElements, ...highlighted]);
   const marks = ELEMENTS.filter((e) => e.level === level && markedIds.has(e.id));
+
+  // The route is working memory, not a record: it fades away behind the
+  // learner. A slow tick keeps the fade advancing while they stand still.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 4000);
+    return () => clearInterval(timer);
+  }, []);
   const here = trail.filter(
-    (p) => Math.abs(p[1] - 1.7 - level * 4) < 2 && p[0] > -20 && p[0] < 70,
+    ({ at, point: p }) =>
+      now - at < TRAIL_LIFE_MS &&
+      Math.abs(p[1] - 1.7 - level * 4) < 2 &&
+      p[0] > -20 &&
+      p[0] < 70,
   );
 
   return (
@@ -86,15 +103,30 @@ export function FloorPlan({
         );
       })}
 
-      {here.length > 1 && (
-        <polyline
-          points={here.map((p) => `${p[0]},${p[2]}`).join(" ")}
-          fill="none"
-          stroke="var(--interactive)"
-          strokeWidth={0.35}
-          strokeOpacity={0.8}
-        />
-      )}
+      {here.length > 1 &&
+        here.slice(1).map(({ at, point: p }, i) => {
+          const prev = here[i].point;
+          if (Math.hypot(p[0] - prev[0], p[2] - prev[2]) > 6) return null;
+          const age = now - at;
+          const fade = Math.min(
+            1,
+            Math.max(0, (TRAIL_LIFE_MS - age) / TRAIL_FADE_MS),
+          );
+          return (
+            <line
+              key={at + ":" + i}
+              x1={prev[0]}
+              y1={prev[2]}
+              x2={p[0]}
+              y2={p[2]}
+              stroke="var(--interactive)"
+              strokeWidth={0.35}
+              strokeLinecap="round"
+              strokeOpacity={0.8 * fade}
+              style={{ transition: "stroke-opacity 4s linear" }}
+            />
+          );
+        })}
 
       {marks.map((m) => {
         const revealed = highlighted.includes(m.id);
@@ -109,6 +141,7 @@ export function FloorPlan({
               : "var(--interactive)"}
             stroke={revealed ? "var(--warning)" : "var(--background)"}
             strokeWidth={revealed ? 0.4 : 0.3}
+            className={revealed ? undefined : "plan-cue"}
           />
         );
       })}

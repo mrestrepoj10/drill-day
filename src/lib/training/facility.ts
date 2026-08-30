@@ -3,7 +3,7 @@ import type { TrainingElement, TrainingRoom, Vec3 } from "@layer0/viewer-trainin
 // Northgate Data & Logistics — the building the lessons are set in.
 //
 // Two storeys on a 48 × 32 m footprint, a corridor spine on each level, and a
-// riser cupboard off it. Built with the Scene API because the page runs without
+// riser cupboard off it. Built as runtime geometry because the page runs without
 // credentials; the shape of the data is the shape a translated design gives you
 // — an id, a name, a room, a level, a bounding box, a property set, and, for
 // anything on a system, the element that feeds it.
@@ -241,7 +241,7 @@ export function slabs(): Slab[] {
 
 /**
  * The ramp up to level one, inside the stair core. A straight run rather than
- * a stair: BimWalk climbs a slope reliably on runtime geometry, and a flight of
+ * a stair: the walk rig climbs a slope reliably on runtime geometry, and a flight of
  * treads is a lot of instances for something you cross twice.
  */
 export const RAMP = {
@@ -472,12 +472,20 @@ export const ELEMENTS: TrainingElement[] = [
 
 export const ELEMENT_BY_ID = new Map(ELEMENTS.map((e) => [e.id, e]))
 
-/** Colour per system, so the model reads as disciplines rather than shapes. */
+/**
+ * Colour per system, so the model reads as disciplines rather than shapes.
+ *
+ * Hexes sit as close to the real identification standards as a screen allows:
+ * BS 1710 auxiliary blue for chilled water, crimson 04-D-45 for LTHW, safety
+ * red 04-E-53 for fire, exit green for egress. Mains pipework is drawn as
+ * silver insulation and carries these as ID bands — reading the band is the
+ * same skill the building teaches in real life.
+ */
 export const SYSTEM_COLOR: Record<string, number> = {
-  "chilled water": 0x3f8ecb,
-  heating: 0xc9603c,
-  fire: 0xcc3a35,
-  egress: 0x3f9e6b,
+  "chilled water": 0x1e6aa8,
+  heating: 0x9b2d30,
+  fire: 0xc8102e,
+  egress: 0x009639,
   electrical: 0xd8a63a,
   air: 0x7d6ec9,
   logistics: 0x808a97,

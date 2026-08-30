@@ -46,6 +46,7 @@ const IDLE: TrainingSession = {
   progress: [],
   level: 0,
   coaching: [],
+  annotations: [],
   trail: [],
 };
 
@@ -64,8 +65,70 @@ const DRILLS: Drill[] = [
     hint: "A forbidden locate call is refused, while inspection and hints remain available.",
     steps: [
       { tool: "training_locate_element", input: { id: "CHW-VLV-L1" }, pause: 500 },
+      { tool: "training_attempt", input: { id: "CHW-VLV-L1" }, pause: 500 },
       { tool: "training_inspect_element", input: { id: "CHW-DROP-214" }, pause: 500 },
       { tool: "training_give_hint" },
+    ],
+  },
+  {
+    label: "Agent takes the verdict",
+    hint: "The agent answers the step itself and is marked by the same rules the learner is.",
+    // Deliberately does not load a mission: it answers whatever step is open,
+    // so it lands inside the flagship drill rather than interrupting it.
+    steps: [
+      { tool: "training_attempt", input: { id: "CHW-FCU-214" }, pause: 1100 },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-FCU-214",
+          note: "I picked this and was marked down: the coil is wet, but water runs downhill. Look above it.",
+        },
+        pause: 900,
+      },
+      { tool: "training_get_session" },
+    ],
+  },
+  {
+    label: "Let it work alone",
+    hint: "One instruction, eight calls: it browses, traces the system, and pins its own notes. Best from the start screen.",
+    // The long autonomous run. Nothing here names a mission answer — it is a
+    // pre-drill briefing on how the building is fed, which is the reasoning the
+    // flagship goes on to test rather than a shortcut past it.
+    steps: [
+      { tool: "training_list_elements", input: { system: "chilled water" }, pause: 800 },
+      { tool: "training_trace_system", input: { id: "CHW-CRAC-217" }, pause: 800 },
+      { tool: "training_inspect_element", input: { id: "CHW-VLV-MAIN" }, pause: 650 },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-VLV-MAIN",
+          note: "Closes chilled water for the whole building, server room included. Last resort, never the first move.",
+        },
+        pause: 800,
+      },
+      { tool: "training_inspect_element", input: { id: "CHW-CRAC-217" }, pause: 650 },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-CRAC-217",
+          note: "Server room cooling, fed from the same chilled water as the rest of the floor. This is the thing you are protecting.",
+        },
+        pause: 800,
+      },
+      {
+        tool: "training_annotate",
+        input: {
+          id: "CHW-RSR-01",
+          note: "Every service upstairs comes up this riser, so this is where one floor can be isolated on its own.",
+        },
+        pause: 800,
+      },
+      {
+        tool: "training_say",
+        input: {
+          text: "Briefing done. One chiller, one riser, and a server room that cannot lose cooling — three notes pinned in the scene where the plant is.",
+        },
+      },
     ],
   },
   {
@@ -115,18 +178,6 @@ const DRILLS: Drill[] = [
 type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
 type HoverLabel = { id: string; name: string; system: string; x: number; y: number };
 
-const VIEWER_CHROME_SELECTOR = [
-  ".homeViewWrapper",
-  ".viewcubeWrapper",
-  ".viewcube",
-  ".adsk-toolbar",
-  ".adsk-button",
-  ".adsk-control-group",
-].join(",");
-
-function isViewerChrome(target: EventTarget | null): boolean {
-  return target instanceof Element && !!target.closest(VIEWER_CHROME_SELECTOR);
-}
 
 export function TrainingDemo() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -143,7 +194,7 @@ export function TrainingDemo() {
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
   const modelContext = useModelContext();
-  const { calls } = modelContext;
+  const { calls, tools } = modelContext;
 
   const { getStage, status, error } = useStage(containerRef, (stage, handle) => {
     const scene = new TrainingScene(stage);
@@ -151,7 +202,12 @@ export function TrainingDemo() {
     stage.setView(OVERVIEW);
     sceneRef.current = scene;
 
-    void loadTraining(handle.av, handle.viewer).then((nextTraining) => {
+    // Walls are solid to the walker; door openings are real gaps, so the
+    // routes through the building are exactly the ones a person could take.
+    handle.rig.moveFilter = (from, to) => !stage.blocked(from, to, ["wall:", "slab:"]);
+    handle.rig.heightAt = (x, z, eyeY) => stage.groundHeight(x, z, eyeY, ["slab:", "ramp"]);
+
+    void loadTraining(handle).then((nextTraining) => {
       nextTraining.setWorld({
         elements: [...ELEMENT_BY_ID.values()],
         rooms: ROOMS,
@@ -172,6 +228,19 @@ export function TrainingDemo() {
   );
   const snapshot = useCallback(() => training?.snapshot() ?? IDLE, [training]);
   const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+
+  // Machine-readable session breadcrumb for automated QA (agents driving the
+  // page can read position/room without scraping pixels). Invisible to users.
+  useEffect(() => {
+    const p = session.position;
+    document.documentElement.dataset.drill = JSON.stringify({
+      room: session.room ?? null,
+      level: session.level,
+      position: p ? p.map((v) => Math.round(v * 10) / 10) : null,
+      step: session.step?.id ?? null,
+      status: session.status,
+    });
+  }, [session]);
 
   // The console is an overlay at every width, closed by default. The first
   // agent-origin tool call opens it once, so the audit trail arrives as a
@@ -214,6 +283,8 @@ export function TrainingDemo() {
     const fresh = session.decisions.slice(pushedDecisions.current);
     pushedDecisions.current = session.decisions.length;
     for (const decision of fresh) {
+      // The agent does not need to be told what the agent just did.
+      if (decision.by === "agent") continue;
       const room = decision.room
         ? ROOMS.find((item) => item.id === decision.room)?.name ?? decision.room
         : undefined;
@@ -232,6 +303,22 @@ export function TrainingDemo() {
       if (line) pushAmbientContext(`Drill Day update: ${line} Call training_get_session for detail.`);
     }
   }, [session.decisions]);
+
+  // The tool access panel tells the learner which half of the toolset is live.
+  // This tells the agent the same thing, unprompted, as the step changes — so
+  // it can plan around a refusal instead of discovering it.
+  const stepId = session.step?.id;
+  useEffect(() => {
+    if (!stepId) return;
+    const allowed = session.step?.allowedTools;
+    pushAmbientContext(
+      allowed
+        ? `Drill Day: a new stage is open and it restricts your tools. Allowed here: ${allowed.join(", ")}. Anything else will be refused.`
+        : "Drill Day: a new stage is open, with every site tool available.",
+    );
+    // Only the step identity should re-announce; the step object is stable per step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -361,10 +448,6 @@ export function TrainingDemo() {
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-    if (isViewerChrome(event.target)) {
-      press.current = null;
-      return;
-    }
     if ((event.target as Element).closest("[data-viewer-marker]")) return;
     press.current = {
       pointerId: event.pointerId,
@@ -376,10 +459,6 @@ export function TrainingDemo() {
   };
 
   const onPointerMove = (event: React.PointerEvent) => {
-    if (isViewerChrome(event.target)) {
-      setHover(undefined);
-      return;
-    }
     const start = press.current;
     if (start?.pointerId === event.pointerId) {
       start.maxDistance = Math.max(
@@ -409,10 +488,6 @@ export function TrainingDemo() {
   };
 
   const onPointerUp = (event: React.PointerEvent) => {
-    if (isViewerChrome(event.target)) {
-      press.current = null;
-      return;
-    }
     const start = press.current;
     press.current = null;
     if (!start || start.pointerId !== event.pointerId) return;
@@ -429,24 +504,46 @@ export function TrainingDemo() {
     const ids = new Set<string>();
     for (const hint of session.revealed) for (const id of hint.reveals ?? []) ids.add(id);
     if (session.selection?.element) ids.add(session.selection.element);
+    // A pinned note puts the agent's sentence on the thing it is about, rather
+    // than in a panel the learner has to look away from.
+    const notes = new Map(session.annotations.map((note) => [note.id, note.note]));
+    for (const id of notes.keys()) ids.add(id);
     return [...ids].flatMap((id) => {
       const element = ELEMENT_BY_ID.get(id);
       if (!element) return [];
       const verdict = session.selection?.element === id ? session.selection.verdict?.kind : undefined;
+      const note = notes.get(id);
       return [{
         id,
         point: element.position as [number, number, number],
-        tone: verdict === "correct" ? "cool" : verdict === "near" ? "warm" : verdict ? "alert" : "neutral",
+        tone: verdict === "correct" ? "cool" : verdict === "near" ? "warm" : verdict ? "alert" : note ? "cool" : "neutral",
         onSelect: session.status !== "running" || session.step?.mode === "select"
           ? () => {
               if (!training) return;
               showSelectionResult(training.toggleSelection(id));
             }
           : undefined,
-        children: <b>{element.name}</b>,
+        children: note ? (
+          <>
+            <b className="block">{element.name}</b>
+            <span className="mt-0.5 block max-w-44 text-pretty text-[11px] font-normal leading-[1.45] opacity-90">
+              {note}
+            </span>
+          </>
+        ) : (
+          <b>{element.name}</b>
+        ),
       } satisfies Marker];
     });
-  }, [session.revealed, session.selection, session.status, session.step?.mode, showSelectionResult, training]);
+  }, [
+    session.annotations,
+    session.revealed,
+    session.selection,
+    session.status,
+    session.step?.mode,
+    showSelectionResult,
+    training,
+  ]);
 
   const roomSigns = useMemo<Marker[]>(() => {
     if (!session.mission || session.level !== 1) return [];
@@ -520,6 +617,13 @@ export function TrainingDemo() {
   return (
     <div className="app-shell">
       <WorkspaceHeader
+        onHome={() => {
+          pickRole("");
+          setActivityPaneOpen(false);
+          setMissionPaneOpen(true);
+        }}
+        tools={tools}
+        step={session.status === "running" ? session.step : undefined}
         context={challengeContext}
         missionPaneOpen={missionPaneOpen}
         activityPaneOpen={activityPaneOpen}
@@ -533,6 +637,7 @@ export function TrainingDemo() {
 
       <main id="training-workspace" className="workspace-grid">
         <TrainingPanel
+          tools={tools}
           session={session}
           onPickRole={pickRole}
           onHint={() => training?.nextHint()}
@@ -602,7 +707,7 @@ export function TrainingDemo() {
             </div>
           ) : null}
 
-          {/* Persistent scene context belongs above the model, away from LMV's toolbar. */}
+          {/* Persistent scene context belongs above the model, clear of the canvas centre. */}
           <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
             <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-background/90 py-1.5 pl-3 pr-1.5 text-[12px]">
               <span className="leading-[1.4]">

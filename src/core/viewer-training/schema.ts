@@ -149,12 +149,43 @@ export interface SelectionResult {
 export interface Decision {
   at: number
   stepId: string
-  kind: "select" | "inspect" | "deselect" | "arrive" | "hint" | "cue" | "blocked" | "stray" | "enter"
+  kind:
+    | "select"
+    | "inspect"
+    | "deselect"
+    | "arrive"
+    | "hint"
+    | "cue"
+    | "blocked"
+    | "stray"
+    | "enter"
+    | "annotate"
+  /**
+   * Who did it. The learner is the default because everything used to be them;
+   * an agent answering or annotating is attributed so the feed, the metrics and
+   * the debrief never credit one to the other.
+   */
+  by?: "learner" | "agent"
   element?: ElementRef
   room?: string
   position?: Vec3
   enabled?: boolean
+  /** The note text, for an `annotate` decision. */
+  note?: string
   verdict?: Verdict
+}
+
+/**
+ * A note the agent has pinned to an element in the shared scene.
+ *
+ * Coaching that names a component is easy to lose in a drawer of text. Pinning
+ * it puts the sentence where the thing is, which is the whole reason both
+ * parties are looking at the same building.
+ */
+export interface Annotation {
+  id: ElementRef
+  note: string
+  at: number
 }
 
 export interface StepProgress {
@@ -188,8 +219,10 @@ export interface TrainingSession {
   level: number
   /** Coaching lines, from the app or from an agent. */
   coaching: { at: number; from: "app" | "agent"; text: string }[]
-  /** Path the learner has walked, for the replay. */
-  trail: Vec3[]
+  /** Notes the agent has pinned to elements in the scene. */
+  annotations: Annotation[]
+  /** Path the learner has walked, timestamped so the plan can age it out. */
+  trail: { at: number; point: Vec3 }[]
 }
 
 /**

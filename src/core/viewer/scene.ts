@@ -1,98 +1,111 @@
-import { loadViewerRuntime } from "./loader"
-import type { AutodeskViewingGlobal, SceneModel, Viewer3D } from "./types"
+import * as THREE from "three"
+import { CameraRig, type RigView, type Vec3 } from "./rig"
 
+export type { RigView, Vec3 }
+
+/**
+ * The rendering half of the viewer, on plain three.js.
+ *
+ * This used to boot Autodesk's LMV with the experimental Scene API. Every
+ * capability the app actually used — dynamic instances, hit testing,
+ * world-to-client projection, cut planes, first-person walking — is small
+ * enough to own directly, and owning it removes the preview-API flicker and
+ * layering faults that came with the wrapper. `Stage` (in `@layer0/scene-render`)
+ * keeps the same public API it always had; this handle is what it draws with.
+ */
 export interface LocalViewerHandle {
-  av: AutodeskViewingGlobal
-  viewer: Viewer3D
-  model: SceneModel
+  scene: THREE.Scene
+  camera: THREE.PerspectiveCamera
+  renderer: THREE.WebGLRenderer
+  canvas: HTMLCanvasElement
+  rig: CameraRig
+  /** Schedules a redraw; consecutive calls in one frame coalesce. */
+  requestRender: () => void
+  /** Horizontal cutaway: hides everything above `y`. `null` restores. */
+  setCutY: (y: number | null) => void
   dispose: () => void
 }
 
-/**
- * Boots a tokenless local viewer (no APS credentials, no design file) with the
- * Scene API feature flag enabled, and shows an empty dynamic model ready for
- * `model.getInstances().add(...)`.
- *
- * Docs: https://aps.autodesk.com/en/docs/viewer/v7/developers_guide/scene_api/
- */
-// LMV initializes globally once per page; feature flags freeze at that point.
-let initPromise: Promise<void> | null = null
+export function createLocalScene(container: HTMLElement): Promise<LocalViewerHandle> {
+  const scene = new THREE.Scene()
+  scene.background = new THREE.Color(0x12181b)
+  scene.fog = new THREE.Fog(0x12181b, 90, 260)
 
-function initOnce(av: Awaited<ReturnType<typeof loadViewerRuntime>>): Promise<void> {
-  initPromise ??= new Promise<void>((resolve) => {
-    if (av.FeatureFlags && av.PublicFeatureFlags?.SceneAPI) {
-      av.FeatureFlags.set(av.PublicFeatureFlags.SceneAPI, true)
-    }
-    av.Initializer({ env: "Local", api: "" }, resolve)
-  })
-  return initPromise
-}
+  const camera = new THREE.PerspectiveCamera(
+    50,
+    Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight),
+    0.1,
+    600,
+  )
 
-export async function createLocalScene(
-  container: HTMLElement,
-): Promise<LocalViewerHandle> {
-  const av = await loadViewerRuntime()
-  await initOnce(av)
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(container.clientWidth, container.clientHeight)
+  renderer.localClippingEnabled = false
+  const canvas = renderer.domElement
+  canvas.style.display = "block"
+  canvas.style.touchAction = "none"
+  canvas.tabIndex = 0
+  container.appendChild(canvas)
 
-  const viewer = new av.GuiViewer3D(container)
-  const started = viewer.start()
-  if (started > 0) throw new Error(`Viewer failed to start (code ${started})`)
+  // Flat, legible lighting: one key from above, soft fill so cupboard interiors
+  // stay readable when the ceiling is on.
+  scene.add(new THREE.AmbientLight(0xffffff, 0.75))
+  const key = new THREE.DirectionalLight(0xffffff, 1.4)
+  key.position.set(24, 40, 14)
+  scene.add(key)
+  const fill = new THREE.DirectionalLight(0xbfd4e2, 0.35)
+  fill.position.set(-18, 22, -26)
+  scene.add(fill)
 
-  // Create a dynamic model and register it with the renderer before
-  // touching its instance collection.
-  const model = new av.Model()
-  viewer.showModel(model)
-  viewer.setBackgroundColor?.(18, 24, 27, 7, 11, 13)
+  const rig = new CameraRig(camera, container)
 
-  return {
-    av,
-    viewer,
-    model,
-    dispose: () => viewer.finish(),
+  let renderQueued = false
+  const draw = () => {
+    renderQueued = false
+    renderer.render(scene, camera)
   }
-}
+  const requestRender = () => {
+    if (renderQueued) return
+    renderQueued = true
+    requestAnimationFrame(draw)
+  }
+  const offRig = rig.onChange(requestRender)
 
-/**
- * Hello Triangle, verbatim from the Scene API tutorial:
- * https://aps.autodesk.com/en/docs/viewer/v7/developers_guide/scene_api/hello-triangle/
- */
-export function addHelloTriangle(handle: LocalViewerHandle): number {
-  const { av, viewer, model } = handle
-  const avs = av.Scene
-  const avm = av.Math
-
-  const instances = model.getInstances()
-
-  // Camera so the triangle is visible.
-  viewer.getCamera().setView({
-    position: new avm.Vector3(0, 0, 5),
-    target: new avm.Vector3(0, 0, 0),
-    up: new avm.Vector3(0, 1, 0),
+  const resize = new ResizeObserver(() => {
+    const w = Math.max(1, container.clientWidth)
+    const h = Math.max(1, container.clientHeight)
+    camera.aspect = w / h
+    camera.updateProjectionMatrix()
+    renderer.setSize(w, h)
+    requestRender()
   })
+  resize.observe(container)
 
-  // Triangle vertices (x/y/z), normals toward the camera, one indexed triangle.
-  const positions = new Float32Array([
-    -1.0, -1.0, 0.0, // bottom-left
-    1.0, -1.0, 0.0, // bottom-right
-    0.0, 1.0, 0.0, // top-center
-  ])
-  const normals = new Float32Array([
-    0.0, 0.0, 1.0,
-    0.0, 0.0, 1.0,
-    0.0, 0.0, 1.0,
-  ])
-  const indices = new Uint16Array([0, 1, 2])
+  const setCutY = (y: number | null) => {
+    // A plane clips where its signed distance goes negative; normal −Y with
+    // constant `y` keeps everything at or below the cut height.
+    renderer.clippingPlanes =
+      y === null ? [] : [new THREE.Plane(new THREE.Vector3(0, -1, 0), y)]
+    requestRender()
+  }
 
-  const geometry = new avs.BufferGeometry()
-  geometry.setAttribute("position", new avs.BufferAttribute(positions, 3))
-  geometry.setAttribute("normal", new avs.BufferAttribute(normals, 3))
-  geometry.setIndices(indices)
+  requestRender()
 
-  const material = new avs.StandardMaterial({ color: 0x00cc88 })
-
-  const id = instances.add(geometry, material)
-
-  // Nothing renders until refresh.
-  viewer.refresh(true)
-  return id
+  return Promise.resolve({
+    scene,
+    camera,
+    renderer,
+    canvas,
+    rig,
+    requestRender,
+    setCutY,
+    dispose: () => {
+      resize.disconnect()
+      offRig()
+      rig.dispose()
+      renderer.dispose()
+      canvas.remove()
+    },
+  })
 }

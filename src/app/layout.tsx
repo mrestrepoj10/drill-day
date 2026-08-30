@@ -23,9 +23,9 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Drill Day — the building teaches back",
   description:
-    "AI-guided facilities training inside a live Autodesk Scene API model, powered by WebMCP.",
+    "AI-guided facilities training inside a live 3D building, powered by WebMCP.",
   applicationName: "Drill Day",
-  keywords: ["WebMCP", "Autodesk Scene API", "facilities training", "digital twin"],
+  keywords: ["WebMCP", "three.js", "facilities training", "digital twin"],
   openGraph: {
     title: "Drill Day — the building teaches back",
     description:
