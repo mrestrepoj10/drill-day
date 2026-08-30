@@ -1,7 +1,5 @@
 import { Check, MapPinned } from "lucide-react";
-import type { RegisteredTool } from "@layer0/webmcp";
 import type { Decision, TrainingSession } from "@layer0/viewer-training";
-import { ToolAccessChip } from "@/components/training/tool-access";
 import { cn } from "@/lib/utils";
 
 export interface MissionStageView {
@@ -13,11 +11,9 @@ export interface MissionStageView {
 export function MissionProgress({
   session,
   stages,
-  tools,
 }: {
   session: TrainingSession;
   stages: MissionStageView[];
-  tools: RegisteredTool[];
 }) {
   const activeFeedback = session.step
     ? session.decisions.findLast(
@@ -85,11 +81,6 @@ export function MissionProgress({
                         </div>
                       </div>
                     ) : null}
-
-                    {/* A guardrail is a feature, so it gets a designed chip —
-                        and the chip opens the actual allow list rather than
-                        summarising it as "search is off". */}
-                    <ToolAccessChip tools={tools} step={session.step} />
 
                     {activeFeedback?.verdict ? (
                       <StageFeedback

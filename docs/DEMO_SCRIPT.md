@@ -8,13 +8,13 @@ Every other WebMCP app in the field sells shared state. This one sells the part 
 
 > It is 07:42 and water is coming through a ceiling tile in Room 214. I am the technician. ChatGPT is on the same page I am, with fifteen site tools. Watch what happens when I ask it to just show me where the room is.
 
-Open on the launch panel: incident brief, three stages, the copyable prompt, and the line that sets up everything — *it can read everything on this page except the answer*. Start the flagship drill and open the **5 of 15 agent tools withheld here** chip under the objective — the stage's allow list, stated before anything is called. Then run **Prove the guardrail**: `training_locate_element` is refused in the log, with the reason, and so is `training_attempt` — this stage is asking the learner to walk, not to pick.
+Open on the launch panel: incident brief, three stages, the copyable prompt, and the line that sets up everything — *it can read everything on this page except the answer*. Start the flagship drill and open the **5 withheld** badge in the navbar — the stage's allow list, stated before anything is called. Then run **Prove the guardrail**: `training_locate_element` is refused in the log, with the reason, and so is `training_attempt` — this stage is asking the learner to walk, not to pick.
 
 ## 0:35–1:20 — permitted
 
 > Same agent, same session, and the toolset moves with the stage. It cannot locate the answer, but it can read where I am standing, inspect any component by name, and spend a hint.
 
-Walk west along the corridor. The floor plan tracks the route while the 3D scene stays clear. Show Learning cues giving every relevant room sign the same treatment without singling out 214, then toggle them off and on so the learner's own choice lands in the feed. Enter Room 214 and reopen the chip: the same five are still withheld for the diagnose stage, and the reasons have changed with it.
+Walk west along the corridor. The floor plan tracks the route while the 3D scene stays clear. Show Learning cues giving every relevant room sign the same treatment without singling out 214, then toggle them off and on so the learner's own choice lands in the feed. Enter Room 214 and reopen the badge: it tracks the stage, and clears entirely on a step that withholds nothing.
 
 ## 1:20–2:05 — wrong, then right
 

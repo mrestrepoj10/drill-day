@@ -574,6 +574,8 @@ export function TrainingDemo() {
   return (
     <div className="app-shell">
       <WorkspaceHeader
+        tools={tools}
+        step={session.status === "running" ? session.step : undefined}
         context={challengeContext}
         missionPaneOpen={missionPaneOpen}
         activityPaneOpen={activityPaneOpen}

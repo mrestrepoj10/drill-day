@@ -119,7 +119,7 @@ export function TrainingPanel({
 
           {step ? (
             <>
-              <MissionProgress session={session} stages={stages} tools={tools} />
+              <MissionProgress session={session} stages={stages} />
               <MissionControls
                 session={session}
                 onHint={onHint}

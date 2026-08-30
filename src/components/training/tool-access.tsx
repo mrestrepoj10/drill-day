@@ -7,19 +7,20 @@ import { GUARDED_TOOLS } from "@/lib/training/tools";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 /**
- * The stage's allow list, in the space of one chip.
+ * The stage's allow list, in the space of one navbar badge.
  *
  * The guardrail used to be visible only after the agent tripped it — a refusal
  * in the log, after the fact. This states the same rule before anything is
- * called, and it moves as the step moves. It stays a chip because the objective
- * is what the learner came to read; the fifteen tool names are detail, and
- * detail belongs one click away.
+ * called, and it moves as the step moves. It lives in the navbar because that
+ * is the one surface present at every width and in every pane state, and
+ * because the mission panel belongs to the objective. The tool names are
+ * detail, and detail belongs one click away.
  *
  * A tool only counts as withheld if it actually routes through the runtime
  * guard. `GUARDED_TOOLS` is that set, so nothing here claims a refusal the page
  * would not make.
  */
-export function ToolAccessChip({
+export function ToolAccessBadge({
   tools,
   step,
 }: {
@@ -38,15 +39,19 @@ export function ToolAccessChip({
 
   return (
     <Popover>
-      <PopoverTrigger className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-warning/25 bg-warning/10 px-2 py-1 text-[11px] font-medium leading-[1.4] text-warning transition-colors hover:bg-warning/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <ShieldAlert className="size-3.5 shrink-0" aria-hidden="true" />
-        <span>
-          {blocked.length} of {tools.length} agent tools withheld here
+      <PopoverTrigger
+        className="workspace-guardrail-action"
+        aria-label={`${blocked.length} of ${tools.length} agent tools withheld on this stage`}
+      >
+        <ShieldAlert aria-hidden="true" />
+        <span className="workspace-trigger-label">{blocked.length} withheld</span>
+        <span className="workspace-guardrail-count" aria-hidden="true">
+          {blocked.length}
         </span>
       </PopoverTrigger>
       <PopoverContent
-        side="right"
-        align="start"
+        side="bottom"
+        align="end"
         sideOffset={8}
         collisionPadding={12}
         className="w-[min(340px,calc(100vw-1.5rem))] p-0"

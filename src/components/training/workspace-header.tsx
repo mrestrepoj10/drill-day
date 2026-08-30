@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { Activity, Box, PanelLeft } from "lucide-react";
+import type { RegisteredTool } from "@layer0/webmcp";
+import type { TrainingStep } from "@layer0/viewer-training";
+import { ToolAccessBadge } from "@/components/training/tool-access";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -10,6 +13,10 @@ interface WorkspaceHeaderProps {
   unseenActivity: number;
   onToggleMission: () => void;
   onToggleActivity: () => void;
+  /** Everything registered on `navigator.modelContext`. */
+  tools: RegisteredTool[];
+  /** The open step, whose allow list the guardrail badge reports. */
+  step: TrainingStep | undefined;
 }
 
 export function WorkspaceHeader({
@@ -19,6 +26,8 @@ export function WorkspaceHeader({
   unseenActivity,
   onToggleMission,
   onToggleActivity,
+  tools,
+  step,
 }: WorkspaceHeaderProps) {
   return (
     <header
@@ -53,6 +62,10 @@ export function WorkspaceHeader({
       </div>
 
       <nav className="workspace-navbar-actions" aria-label="Workspace utilities">
+        {/* The guardrail is the thing this page is arguing for, so it sits on
+            the one surface that is present at every width and pane state. */}
+        <ToolAccessBadge tools={tools} step={step} />
+
         <Button
           type="button"
           variant="ghost"

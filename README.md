@@ -28,7 +28,7 @@ The page exposes 15 native site tools through `navigator.modelContext`. They ope
 | Answer and be marked | `training_attempt` |
 | Create training | `training_start_mission`, `training_author_mission` |
 
-Every tool has a constrained JSON Schema, a human-readable title and description, truthful read-only annotations, and an async executor. Mission-level allow lists enforce instructional guardrails, and the mission panel shows which half of the toolset the current stage leaves live before the agent tries it. An agent can inspect a valve while being refused permission to locate it.
+Every tool has a constrained JSON Schema, a human-readable title and description, truthful read-only annotations, and an async executor. Mission-level allow lists enforce instructional guardrails, and a navbar badge names the tools the current stage withholds before the agent tries one. An agent can inspect a valve while being refused permission to locate it.
 
 `training_attempt` is the other half of that idea: the agent can commit to an answer and take the same deterministic verdict a learner's click gets — including the authored near-miss diagnosis — recorded in the shared log under its own name. It is deliberately not binding. A coach that could clear the step on the learner's behalf would end the drill.
 
