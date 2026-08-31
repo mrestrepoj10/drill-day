@@ -32,8 +32,25 @@ export function ViewerHud({
   /** The mission drawer is open and already showing all of this. */
   hidden: boolean;
 }) {
-  const [open, setOpen] = useState(true);
   const step = session.step;
+  const objective = `${session.mission?.id ?? ""}:${step?.id ?? ""}`;
+
+  const [open, setOpen] = useState(true);
+  const [shown, setShown] = useState(objective);
+
+  // A new objective is new information, so it re-opens itself. Someone who
+  // collapsed the HUD was clearing the canvas for the step they had already
+  // read — at drawer widths the top bar only says "click a component", so
+  // leaving the next prompt behind an icon is how you miss it entirely.
+  //
+  // Adjusted during render rather than in an effect: React re-runs this pass
+  // before painting, so the panel is never briefly shut on a step nobody has
+  // read yet.
+  if (objective !== shown) {
+    setShown(objective);
+    setOpen(true);
+  }
+
   if (session.status !== "running" || !step) return null;
 
   // Collapsed it is a single icon: the model is what the viewer is for, and

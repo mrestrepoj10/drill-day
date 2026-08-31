@@ -264,21 +264,9 @@ function MissionLaunch({
           ))}
         </ol>
 
-        <Button
-          type="button"
-          onClick={() => onPickRole("technician")}
-          className="group mt-5 h-11 w-full justify-between px-4 text-[13px] font-semibold hover:bg-white"
-        >
-          <span className="flex items-center gap-2">
-            <Timer className="size-4" aria-hidden="true" /> Start the 90-second drill
-          </span>
-          <ArrowRight className="workspace-action-arrow size-4" aria-hidden="true" />
-        </Button>
-
-        {/* The cold start: what to paste, and what the page will refuse to do
-            with it. A judge who reads nothing else should still get the idea. */}
-        {/* The prompt is where the whole demo starts, so it gets the weight —
-            an outlined card competing with the drill button was burying it. */}
+        {/* The prompt is where the whole demo starts, so it leads — and gets
+            the weight, rather than sitting under the drill button as a
+            footnote. */}
         <div className="mt-5 rounded-xl border border-interactive/30 bg-interactive/[0.06] p-4">
           <div className="flex items-center gap-2">
             <Bot className="size-3.5 text-interactive" aria-hidden="true" />
@@ -298,6 +286,19 @@ function MissionLaunch({
             It can read everything here except the answer.
           </p>
         </div>
+        <Button
+          type="button"
+          onClick={() => onPickRole("technician")}
+          className="group mt-3 h-11 w-full justify-between px-4 text-[13px] font-semibold hover:bg-white"
+        >
+          <span className="flex items-center gap-2">
+            <Timer className="size-4" aria-hidden="true" /> Start the 90-second drill
+          </span>
+          <ArrowRight className="workspace-action-arrow size-4" aria-hidden="true" />
+        </Button>
+
+        {/* The cold start: what to paste, and what the page will refuse to do
+            with it. A judge who reads nothing else should still get the idea. */}
       </section>
 
       <div className="mt-auto border-t border-border p-3">
