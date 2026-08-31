@@ -271,6 +271,15 @@ class ViewerTrainingRuntime implements ViewerTraining {
 
     toggleSelection(id: ElementRef): SelectionResult {
       if (this.session.selection?.element === id) {
+        // Clearing by clicking again belongs to browsing. Once an answer has
+        // been marked, a second click must not quietly un-answer it — in first
+        // person the reticle is the only aim, people click twice to be sure,
+        // and an even number of clicks was landing them back on nothing while
+        // looking exactly like the click had never registered.
+        const answered = this.session.selection.verdict
+        if (answered) {
+          return { action: "selected", message: answered.message, verdict: answered }
+        }
         this.renderer?.setSelection(null)
         this.session = { ...this.session, selection: undefined }
         this.record({ kind: "deselect", element: id })

@@ -853,8 +853,8 @@ export function TrainingDemo() {
                 <span className="workspace-viewer-objective flex items-center gap-1 text-muted-foreground">
                   {session.step?.mode === "reach" ? (
                     <>Reach {destinationLabel ?? "the target room"}</>
-                  ) : session.selection ? (
-                    <><MousePointer2 className="size-3" aria-hidden="true" /> Click the selected component again to clear</>
+                  ) : session.selection && !session.selection.verdict ? (
+                    <><MousePointer2 className="size-3" aria-hidden="true" /> Click it again to clear</>
                   ) : (
                     <>
                       <MousePointer2 className="size-3" aria-hidden="true" /> Click a component to answer
