@@ -79,9 +79,11 @@ export class CameraRig {
     // there is no drag to tell apart from a click, so looking and selecting
     // stop competing for the same gesture.
     document.addEventListener("pointerlockchange", this.onLockChange)
+    document.addEventListener("pointerlockerror", this.onLockChange)
     document.addEventListener("mousemove", this.onLockedLook)
     this.detach.push(() => {
       document.removeEventListener("pointerlockchange", this.onLockChange)
+      document.removeEventListener("pointerlockerror", this.onLockChange)
       document.removeEventListener("mousemove", this.onLockedLook)
     })
   }
@@ -189,11 +191,19 @@ export class CameraRig {
     return document.pointerLockElement === this.dom
   }
 
-  /** Asks for the lock. Must be called from a user gesture. */
+  /**
+   * Asks for the lock. Must be called from a user gesture.
+   *
+   * Refusal is normal, not exceptional: it is denied in an iframe without
+   * `allow-pointer-lock`, and — per spec — always denied immediately after the
+   * user exits with Escape. Callers must stay usable without it, so this only
+   * ever asks; `pointerlockerror` and `pointerlockchange` report what happened.
+   */
   requestLook(): void {
     if (this.mode !== "walk" || this.locked) return
-    // Some browsers reject the promise (denied, or too soon after an exit).
-    // Losing the lock is not fatal — drag-to-look still works.
+    // The promise form is a proposed addition and is not everywhere, so the
+    // events above are the real channel and this catch is only for hosts that
+    // do return one.
     void Promise.resolve(this.dom.requestPointerLock()).catch(() => undefined)
   }
 

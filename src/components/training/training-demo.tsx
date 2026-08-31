@@ -464,9 +464,16 @@ export function TrainingDemo() {
     maxDistance: number;
   } | null>(null);
 
+  /** Whether the camera was already ours when this press started. */
+  const heldAtPress = useRef(false);
+
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
     if ((event.target as Element).closest("[data-viewer-marker]")) return;
+    // Ask on the press, so the release knows whether this click bought the
+    // camera or was made with it.
+    heldAtPress.current = getStage()?.looking ?? false;
+    if (walking && !heldAtPress.current) getStage()?.requestLook();
     press.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -515,30 +522,32 @@ export function TrainingDemo() {
   const onPointerUp = (event: React.PointerEvent) => {
     const start = press.current;
     press.current = null;
+    const held = getStage()?.looking ?? false;
 
-    // Locked: the pointer has no position, so a click cannot be a drag and
-    // there is nothing to disambiguate. This is the whole reason for the lock
-    // — the distance and duration gates below were throwing away real clicks
-    // that drifted a few pixels or took longer than they were allowed to.
-    if (looking) {
+    if (held) {
+      // The click that took the camera bought that and nothing else; a click
+      // made while already holding it is an answer.
+      if (!heldAtPress.current) return;
+      // Locked, the pointer has no position, so a click cannot be a drag and
+      // there is nothing to disambiguate — the whole reason for the lock. The
+      // gates below were throwing away real clicks that drifted a few pixels
+      // or took longer than they were allowed to.
       const centre = crosshair();
       if (centre) answerAt(centre[0], centre[1]);
       return;
     }
 
-    // Walking but not locked, either because the browser refused or because
-    // the learner has not engaged yet: the first click asks for the lock
-    // rather than answering, so nobody selects something by accident on the
-    // click that was meant to take control of the camera.
-    if (walking) {
-      getStage()?.requestLook();
-      return;
-    }
-
+    // No lock: refused in an iframe, unsupported, or inside the cooldown the
+    // spec imposes right after an Escape exit. Clicking still has to answer —
+    // a click that only ever asks for a camera it cannot have is a dead click
+    // — and with drag-to-look back in play the gates below mean something
+    // again.
     if (!start || start.pointerId !== event.pointerId) return;
     if (start.maxDistance > (event.pointerType === "touch" ? 14 : 9)) return;
     if (performance.now() - start.t > 700) return;
-    answerAt(event.clientX, event.clientY);
+    const centre = walking ? crosshair() : null;
+    if (centre) answerAt(centre[0], centre[1]);
+    else answerAt(event.clientX, event.clientY);
   };
 
   const onPointerCancel = () => {
