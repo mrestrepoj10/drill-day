@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import type { LocalViewerHandle } from "@layer0/viewer"
+import { buildOctree, type LocalViewerHandle, type Octree, type WalkWorld } from "@layer0/viewer"
 import type { GeometryBuffers } from "./geometry"
 import { parseColor, type Vec3 } from "./spec"
 import {
@@ -84,7 +84,7 @@ const BUILT_INS: Record<string, () => GeometryBuffers> = {
  * one redraw. There is no progressive renderer underneath any more, so a busy
  * frame can no longer flicker half-drawn.
  */
-export class Stage {
+export class Stage implements WalkWorld {
   private geometries = new Map<string, THREE.BufferGeometry>()
   private items = new Map<string, StageItem>()
   private objects = new Map<string, THREE.Mesh | THREE.LineSegments>()
@@ -92,8 +92,14 @@ export class Stage {
   private cameraAnimation = 0
   private raycaster = new THREE.Raycaster()
   private dirty = false
+  private walkCollider: Octree | null = null
+  private walkColliderStale = true
 
-  constructor(private handle: LocalViewerHandle) {}
+  constructor(private handle: LocalViewerHandle) {
+    // The rig asks the stage for its solid world rather than being handed one,
+    // so nothing has to know when the building finished being built.
+    handle.rig.walkWorld = this
+  }
 
   // --- geometry -----------------------------------------------------------
 
@@ -138,6 +144,7 @@ export class Stage {
       this.handle.scene.add(object)
       this.items.set(id, { ...init, id })
       this.objects.set(id, object)
+      this.touchWalkCollider(id)
       this.dirty = true
       return
     }
@@ -151,6 +158,7 @@ export class Stage {
     const object = this.objects.get(id)!
     if (moved || reclassified) object.matrix.copy(this.matrix(next))
     if (repainted) this.repaintObject(object, next)
+    if (moved) this.touchWalkCollider(id)
     if (moved || repainted) this.dirty = true
   }
 
@@ -162,6 +170,7 @@ export class Stage {
     if (samePlacement(item, next)) return
     this.items.set(id, next)
     this.objects.get(id)!.matrix.copy(this.matrix(next))
+    this.touchWalkCollider(id)
     this.dirty = true
   }
 
@@ -183,6 +192,7 @@ export class Stage {
     ;(object.material as THREE.Material).dispose()
     this.objects.delete(id)
     this.items.delete(id)
+    this.touchWalkCollider(id)
     this.dirty = true
   }
 
@@ -228,7 +238,9 @@ export class Stage {
     }
     this.groups.set(group, next)
     for (const item of this.items.values()) {
-      if (item.group === group) this.objects.get(item.id)!.matrix.copy(this.matrix(item))
+      if (item.group !== group) continue
+      this.objects.get(item.id)!.matrix.copy(this.matrix(item))
+      this.touchWalkCollider(item.id)
     }
     this.dirty = true
   }
@@ -239,10 +251,18 @@ export class Stage {
 
   // --- picking ------------------------------------------------------------
 
-  /** Screen point → stage id. */
+  /**
+   * Screen point → stage id.
+   *
+   * Looks *past* decoration rather than being stopped by it. The ray already
+   * arrives as a distance-sorted list, so the first selectable thing along it
+   * is the answer; taking hit[0] and dropping it when it happened to be trim
+   * meant a bracket or an ID collar in front of a valve silently cost the
+   * exact hit, leaving only a centre-distance tolerance that works from some
+   * angles and not others.
+   */
   pick(clientX: number, clientY: number): StageItem | undefined {
-    const hit = this.rawHit(clientX, clientY)
-    return hit?.item && !hit.item.decorative ? hit.item : undefined
+    return this.rawHit(clientX, clientY, true)?.item
   }
 
   /**
@@ -324,6 +344,8 @@ export class Stage {
   private rawHit(
     clientX: number,
     clientY: number,
+    /** Skip guides and trim, and keep going to whatever is behind them. */
+    selectableOnly = false,
   ): { item?: StageItem; distance: number } | undefined {
     const rect = this.handle.canvas.getBoundingClientRect()
     const ndc = new THREE.Vector2(
@@ -344,45 +366,60 @@ export class Stage {
       // matching the old `hitTest(..., ignoreTransparent)` behaviour.
       if ((item.opacity ?? 1) < 1) continue
       if (planes.some((p) => p.distanceToPoint(hit.point) < 0)) continue
+      if (selectableOnly && item.decorative) continue
       return { item, distance: hit.distance }
     }
     return undefined
   }
 
-  /**
-   * True when the segment from `from` to `to` passes through an item whose id
-   * starts with one of `prefixes` — the walk-mode collision test. A margin
-   * keeps the camera's near plane out of the wall face.
-   */
-  blocked(from: Vec3, to: Vec3, prefixes: readonly string[], margin = 0.35): boolean {
-    const origin = new THREE.Vector3(...from)
-    const target = new THREE.Vector3(...to)
-    const direction = target.clone().sub(origin)
-    const distance = direction.length()
-    if (distance < 1e-6) return false
-    this.raycaster.set(origin, direction.normalize())
-    this.raycaster.far = distance + margin
-    const solids = [...this.objects.values()].filter(
-      (o) => o.type === "Mesh" && prefixes.some((p) => o.name.startsWith(p)),
-    )
-    const hit = this.raycaster.intersectObjects(solids, false).length > 0
-    this.raycaster.far = Infinity
-    return hit
-  }
+  // --- walking ------------------------------------------------------------
 
   /**
-   * The walking surface under plan position (x, z), probed downward from just
-   * below eye level so an upper storey doesn't shadow the one being walked.
+   * Id prefixes that make an item solid to the walker.
+   *
+   * Structure and walking surfaces only. Equipment, furniture and trim are
+   * deliberately absent: a plant room modelled down to the pipe brackets would
+   * otherwise be a corridor nobody can get down, and the demo is about finding
+   * the valve, not squeezing past it.
+   *
+   * `stair:` is split. The balustrades (`rail-`/`post-`) are in, because with
+   * real gravity the drop into the stairwell is now a drop; the nosings are
+   * out, because a 12 mm lip on every tread is a kerb the capsule would trip
+   * on; the raking waists are out, because the soffit under the flight is
+   * already boxed in as `wall:stair-store`.
    */
-  groundHeight(x: number, z: number, eyeY: number, prefixes: readonly string[]): number | null {
-    this.raycaster.set(new THREE.Vector3(x, eyeY - 0.2, z), new THREE.Vector3(0, -1, 0))
-    this.raycaster.far = 4
-    const solids = [...this.objects.values()].filter(
-      (o) => o.type === "Mesh" && prefixes.some((p) => o.name.startsWith(p)),
-    )
-    const hit = this.raycaster.intersectObjects(solids, false)[0]
-    this.raycaster.far = Infinity
-    return hit ? hit.point.y : null
+  walkSolids: readonly string[] = ["wall:", "slab:", "ramp:", "stair:rail-", "stair:post-"]
+
+  /**
+   * Rebuilds the walk collider from the current scene. Called for you the
+   * first time someone walks, and whenever solid geometry changes; call it
+   * directly only after changing `walkSolids`.
+   */
+  rebuildWalkCollider(): void {
+    // Item matrices are written straight into `object.matrix` with automatic
+    // updates off, so nothing has propagated them to `matrixWorld` unless a
+    // frame has been drawn since.
+    this.handle.scene.updateMatrixWorld(true)
+    const solids: THREE.Mesh[] = []
+    for (const [id, object] of this.objects) {
+      if (object instanceof THREE.Mesh && this.walkSolids.some((p) => id.startsWith(p))) {
+        solids.push(object)
+      }
+    }
+    this.walkCollider = solids.length ? buildOctree(solids) : null
+    this.walkColliderStale = false
+  }
+
+  /** The `WalkWorld` the rig collides against; built on first use. */
+  walkOctree(): Octree | null {
+    if (this.walkColliderStale) this.rebuildWalkCollider()
+    return this.walkCollider
+  }
+
+  /** Marks the collider stale if `id` is one of the solids it is built from. */
+  private touchWalkCollider(id: string): void {
+    if (this.walkColliderStale) return
+    if (this.walkSolids.some((p) => id.startsWith(p))) this.walkColliderStale = true
   }
 
   // --- camera -------------------------------------------------------------
@@ -427,6 +464,31 @@ export class Stage {
   /** Current camera position/target, read back off the rig. */
   currentView(): CameraView | undefined {
     return this.handle.rig.getView()
+  }
+
+  // --- first-person look ---------------------------------------------------
+
+  /** True while the pointer is locked to the viewport and driving the look. */
+  get looking(): boolean {
+    return this.handle.rig.locked
+  }
+
+  /**
+   * Asks for the pointer. The browser can refuse — a request made immediately
+   * after the user pressed Escape is specified to fail — and the refusal
+   * arrives at `onLook` as `false` so the UI can put the prompt back up.
+   */
+  requestLook(): void {
+    this.handle.rig.requestLook()
+  }
+
+  releaseLook(): void {
+    this.handle.rig.releaseLook()
+  }
+
+  /** Notifies on every lock, unlock, and refusal. */
+  onLook(fn: (locked: boolean) => void): () => void {
+    return this.handle.rig.onLock(fn)
   }
 
   /** A three-quarter view framing a box of `size` centred on `centre`. */

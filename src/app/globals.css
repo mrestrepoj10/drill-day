@@ -296,6 +296,54 @@ a {
   color: inherit;
 }
 
+/* Walking but not yet holding the camera: the whole surface is "click to look
+   around", so say so. Once the pointer is locked the browser hides the cursor
+   for us and the crosshair is the only mark on screen. */
+.workspace-viewer[data-look-mode="click"]:not([data-looking]) {
+  cursor: pointer;
+}
+
+/* Wherever the lock cannot be had, looking is a drag, and the cursor says the
+   same thing the walk controls do. */
+.workspace-viewer[data-look-mode="drag"] {
+  cursor: grab;
+}
+
+.workspace-viewer[data-look-mode="drag"]:active {
+  cursor: grabbing;
+}
+
+/* Locked, the pointer does not exist, so neither do its click targets. */
+.workspace-viewer[data-looking] [data-viewer-marker] {
+  pointer-events: none;
+}
+
+/* The walk controls' quiet bar: the release reminder while the pointer is
+   ours, the look hint while it is not. Bottom centre — clear of the objective
+   HUD in the bottom-left corner, and clear of Chrome's own unhideable "press
+   Esc" banner at the top, which this is the page's answer to. */
+.walk-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0.75rem;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  padding-inline: 0.75rem;
+  /* Centred by a full-width row rather than a translate, so `.surface-pop`
+     owns the transform and the bar does not slide sideways as it arrives. */
+  pointer-events: none;
+}
+
+/* Narrow enough that the bar would sit on the floor plan: the way out keeps
+   its room, the movement reference gives up its own. */
+@media (max-width: 640px) {
+  .walk-bar-keys {
+    display: none;
+  }
+}
+
 /* Objective + floor plan, pinned to the model.
    Only below 1500px, where the mission panel is a drawer and would otherwise
    take both away with it. Bottom-left, so the centre of the canvas stays the
@@ -319,6 +367,11 @@ a {
 /* The drawer that owns this content is open; it is saying all of it already. */
 .workspace-hud[data-hidden] {
   display: none;
+}
+
+/* Collapsed it is one icon, and should take exactly that much room. */
+.workspace-hud[data-collapsed] {
+  width: auto;
 }
 
 @keyframes hud-in {

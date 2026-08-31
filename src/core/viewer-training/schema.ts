@@ -118,6 +118,12 @@ export interface TrainingRoom {
   level: number
   /** Footprint bounds [minX, minZ, maxX, maxZ]. */
   bounds: [number, number, number, number]
+  /**
+   * Where to put someone who is dropped into this room, when the centre of the
+   * footprint is not floor. A stair core is the case that forces it: its
+   * bounds cover the stairwell, and its centre is over the void.
+   */
+  entry?: Vec3
 }
 
 // --- what comes back -------------------------------------------------------

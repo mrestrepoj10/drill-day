@@ -271,6 +271,15 @@ class ViewerTrainingRuntime implements ViewerTraining {
 
     toggleSelection(id: ElementRef): SelectionResult {
       if (this.session.selection?.element === id) {
+        // Clearing by clicking again belongs to browsing. Once an answer has
+        // been marked, a second click must not quietly un-answer it — in first
+        // person the reticle is the only aim, people click twice to be sure,
+        // and an even number of clicks was landing them back on nothing while
+        // looking exactly like the click had never registered.
+        const answered = this.session.selection.verdict
+        if (answered) {
+          return { action: "selected", message: answered.message, verdict: answered }
+        }
         this.renderer?.setSelection(null)
         this.session = { ...this.session, selection: undefined }
         this.record({ kind: "deselect", element: id })
@@ -642,14 +651,17 @@ class ViewerTrainingRuntime implements ViewerTraining {
     }
 
     async goToLevel(level: number): Promise<void> {
-      const entry = this.world.rooms.find((r) => r.level === level)
-      if (!entry) return
-      const [minX, minZ, maxX, maxZ] = entry.bounds
-      await this.enterWalk([
-        (minX + maxX) / 2,
-        level * this.world.storeyHeight,
-        (minZ + maxZ) / 2,
-      ])
+      const room = this.world.rooms.find((r) => r.level === level)
+      if (!room) return
+      const [minX, minZ, maxX, maxZ] = room.bounds
+      // A room can name where it is standable; its centre may be a void.
+      await this.enterWalk(
+        room.entry ?? [
+          (minX + maxX) / 2,
+          level * this.world.storeyHeight,
+          (minZ + maxZ) / 2,
+        ],
+      )
     }
 
     // --- lookups ----------------------------------------------------------
