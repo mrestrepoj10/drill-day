@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Clipboard, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -26,10 +26,17 @@ export const AUDIT_PROMPT =
 export function SuggestedPrompt({
   prompt = SUGGESTED_PROMPT,
   prominent = false,
+  action,
 }: {
   prompt?: string;
   /** On the launch screen this is the first move, so it is sized like one. */
   prominent?: boolean;
+  /**
+   * The primary action to sit beside Copy. Passing it keeps the pair on one
+   * row: two stacked full-width solid buttons read as two primaries competing,
+   * which is exactly what they should not be.
+   */
+  action?: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -50,16 +57,25 @@ export function SuggestedPrompt({
       >
         {prompt}
       </p>
-      <Button
-        type="button"
-        variant={prominent ? "default" : "ghost"}
-        size={prominent ? "default" : "xs"}
-        onClick={copyPrompt}
-        className={prominent ? "mt-3 w-full text-[13px] font-semibold" : "mt-2 -ml-2 text-interactive hover:text-foreground"}
-      >
-        {copied ? <ClipboardCheck className="size-3" /> : <Clipboard className="size-3" />}
-        {copied ? "Copied" : "Copy prompt"}
-      </Button>
+      <div className={action ? "mt-3 flex gap-2" : ""}>
+        <Button
+          type="button"
+          variant={action ? "outline" : prominent ? "default" : "ghost"}
+          size={prominent || action ? "default" : "xs"}
+          onClick={copyPrompt}
+          className={
+            action
+              ? "flex-1 text-[13px] font-medium"
+              : prominent
+                ? "mt-3 w-full text-[13px] font-semibold"
+                : "mt-2 -ml-2 text-interactive hover:text-foreground"
+          }
+        >
+          {copied ? <ClipboardCheck className="size-3" /> : <Clipboard className="size-3" />}
+          {copied ? "Copied" : "Copy prompt"}
+        </Button>
+        {action}
+      </div>
     </>
   );
 }

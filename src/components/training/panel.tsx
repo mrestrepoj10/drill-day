@@ -264,14 +264,15 @@ function MissionLaunch({
           ))}
         </ol>
 
-        {/* The prompt is where the whole demo starts, so it leads — and gets
-            the weight, rather than sitting under the drill button as a
-            footnote. */}
+        {/* One card, one row, one primary. Two stacked full-width solid
+            buttons were two primaries competing — and the pair belongs
+            together anyway: the prompt asks the agent to read a session, so
+            there has to be a session for it to read. */}
         <div className="mt-5 rounded-xl border border-interactive/30 bg-interactive/[0.06] p-4">
           <div className="flex items-center gap-2">
             <Bot className="size-3.5 text-interactive" aria-hidden="true" />
             <h2 className="text-[12px] font-semibold leading-[1.4] text-interactive">
-              Paste this into ChatGPT
+              Bring your agent
             </h2>
             {toolCount ? (
               <span className="ml-auto font-mono text-[11px] leading-[1.4] text-text-tertiary">
@@ -280,22 +281,23 @@ function MissionLaunch({
             ) : null}
           </div>
           <div className="mt-2.5">
-            <SuggestedPrompt prominent />
+            <SuggestedPrompt
+              prominent
+              action={
+                <Button
+                  type="button"
+                  onClick={() => onPickRole("technician")}
+                  className="flex-1 text-[13px] font-semibold hover:bg-white"
+                >
+                  <Timer className="size-4" aria-hidden="true" /> Start the drill
+                </Button>
+              }
+            />
           </div>
           <p className="mt-3 text-pretty text-[12px] leading-[1.5] text-text-tertiary">
-            It can read everything here except the answer.
+            Start the drill first — the prompt asks your agent to read the session you are in.
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={() => onPickRole("technician")}
-          className="group mt-3 h-11 w-full justify-between px-4 text-[13px] font-semibold hover:bg-white"
-        >
-          <span className="flex items-center gap-2">
-            <Timer className="size-4" aria-hidden="true" /> Start the 90-second drill
-          </span>
-          <ArrowRight className="workspace-action-arrow size-4" aria-hidden="true" />
-        </Button>
 
         {/* The cold start: what to paste, and what the page will refuse to do
             with it. A judge who reads nothing else should still get the idea. */}
