@@ -1,6 +1,6 @@
 import { schema, type ModelContextTool } from "@layer0/webmcp"
 import type { Mission, TrainingStep, ViewerTraining } from "@layer0/viewer-training"
-import { ELEMENT_BY_ID, LEVELS, ROOMS, STOREY } from "./facility"
+import { ELEMENT_BY_ID, LEVELS, ROOMS, roomCentre, STOREY } from "./facility"
 import { MISSIONS, ROLES } from "./missions"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -375,8 +375,7 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         if (input.walkToRoom) {
           const room = ROOMS.find((r) => r.id === input.walkToRoom)
           if (!room) throw new Error(`no room "${input.walkToRoom}"`)
-          const [minX, minZ, maxX, maxZ] = room.bounds
-          await t.enterWalk([(minX + maxX) / 2, room.level * STOREY, (minZ + maxZ) / 2])
+          await t.enterWalk(roomCentre(room.id))
           return { standingIn: room.name }
         }
         if (input.overview) {
@@ -609,21 +608,13 @@ function compile(input: AuthoredMission, t: ViewerTraining): Mission {
     if (step.mode === "reach" && !step.destinationRoom) {
       throw new Error(`step ${i + 1}: a reach step needs a destinationRoom`)
     }
-    const start = step.startAtRoom ? ROOMS.find((r) => r.id === checkRoom(step.startAtRoom!)) : undefined
+    const start = step.startAtRoom ? checkRoom(step.startAtRoom) : undefined
     return {
       id: `a${i + 1}`,
       prompt: step.prompt,
       guidance: step.guidance,
       mode: step.mode,
-      startState: start
-        ? {
-            walkTo: [
-              (start.bounds[0] + start.bounds[2]) / 2,
-              start.level * STOREY,
-              (start.bounds[1] + start.bounds[3]) / 2,
-            ],
-          }
-        : undefined,
+      startState: start ? { walkTo: roomCentre(start) } : undefined,
       validSelections: step.selectIds?.map(checkElement),
       nearMisses: step.nearMisses?.map((n) => ({ id: checkElement(n.id), diagnosis: n.diagnosis })),
       validDestination: step.destinationRoom ? { room: checkRoom(step.destinationRoom) } : undefined,

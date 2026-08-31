@@ -1,4 +1,5 @@
 import * as THREE from "three"
+import { WalkBody, type WalkInput, type WalkWorld } from "./collide"
 
 export type Vec3 = [number, number, number]
 
@@ -8,14 +9,31 @@ export interface RigView {
   up?: Vec3
 }
 
+/** Radians of turn per pixel of pointer travel, while the pointer is locked. */
+const LOOK_SENSITIVITY = 0.0022
+
+/** How far a discrete key tap carries the walker before drag eats it. */
+const TAP_METRES = 0.35
+
+/**
+ * Metres the eye must travel before the frame is worth redrawing. Resting on
+ * a floor is a permanent sub-millimetre sink-and-push-out cycle, and the
+ * viewer renders on demand — without a floor under the comparison, standing
+ * still would repaint the building sixty times a second.
+ */
+const MOVED_EPSILON = 0.002
+
+const MOVE_KEYS = ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]
+
 /**
  * Camera control for the training viewer, in two modes.
  *
  * `orbit` — drag rotates about a target, wheel dollies, right/middle drag (or
- * two-finger drag) pans. `walk` — the camera is a person: drag turns the head,
- * WASD/arrow keys move on the floor plane at a fixed eye height. Walk is what
- * satisfies a `reach` step, so the two modes must never be conflated: an orbit
- * gesture cannot move the learner.
+ * two-finger drag) pans. `walk` — the camera is a person: a capsule with
+ * momentum and gravity, resolved against the solid world the host supplies
+ * (see `collide.ts`), looking with a locked pointer and moving on WASD/arrows.
+ * Walk is what satisfies a `reach` step, so the two modes must never be
+ * conflated: an orbit gesture cannot move the learner.
  *
  * The rig owns no render loop; it fires `onChange` and the host redraws.
  */
@@ -23,18 +41,10 @@ export class CameraRig {
   mode: "orbit" | "walk" = "orbit"
 
   /**
-   * Walk-mode collision gate: return false to veto a step from `from` to
-   * `to` (both at eye height). Steps are tested per axis, so a vetoed
-   * diagonal still slides along the wall.
+   * The solid world for walk collision. Asked for its octree every frame, so
+   * the host can build it lazily and rebuild it whenever the scene changes.
    */
-  moveFilter: ((from: Vec3, to: Vec3) => boolean) | null = null
-
-  /**
-   * Walk-mode ground probe: given a plan position and the current eye height,
-   * return the floor level under it (or null to keep the current height).
-   * This is what carries the walker up a ramp and between storeys.
-   */
-  heightAt: ((x: number, z: number, eyeY: number) => number | null) | null = null
+  walkWorld: WalkWorld | null = null
 
   private target = new THREE.Vector3()
   private sphere = new THREE.Spherical(30, 1.1, 0.9)
@@ -42,9 +52,18 @@ export class CameraRig {
   private yaw = 0
   private pitch = 0
   private keys = new Set<string>()
+  private sprint = false
+  private body = new WalkBody()
+  private eye = new THREE.Vector3()
+  /** Where the eye was when the last redraw was asked for. */
+  private drawnEye = new THREE.Vector3()
   private walkFrame = 0
   private lastStep = 0
   private changeListeners = new Set<() => void>()
+  private lockListeners = new Set<(locked: boolean) => void>()
+  private lockedState = false
+  /** A request is in flight: a refusal must still reach `onLock`. */
+  private lockPending = false
   private detach: (() => void)[] = []
   private pointers = new Map<number, { x: number; y: number; button: number }>()
   /** Programmatic moves must not fight an in-flight user gesture; they win. */
@@ -65,6 +84,13 @@ export class CameraRig {
       target.addEventListener(type as string, fn as EventListener)
       this.detach.push(() => target.removeEventListener(type as string, fn as EventListener))
     }
+    const onDoc = <K extends keyof DocumentEventMap>(
+      type: K,
+      fn: (e: DocumentEventMap[K]) => void,
+    ) => {
+      document.addEventListener(type, fn as EventListener)
+      this.detach.push(() => document.removeEventListener(type, fn as EventListener))
+    }
     on("pointerdown", (e) => this.onPointerDown(e))
     on("pointermove", (e) => this.onPointerMove(e))
     on("pointerup", (e) => this.onPointerEnd(e))
@@ -73,18 +99,63 @@ export class CameraRig {
     on("contextmenu", (e) => e.preventDefault())
     on("keydown", (e) => this.onKey(e as KeyboardEvent, true), window)
     on("keyup", (e) => this.onKey(e as KeyboardEvent, false), window)
-    on("blur", () => this.keys.clear(), window)
+    on("blur", () => this.releaseKeys(), window)
+    // A locked pointer delivers its movement to the document, not to the
+    // element, and reports its own state only through the two events below.
+    // The promise-returning `requestPointerLock()` is a proposed addition and
+    // not universal, so it cannot be the channel a refusal arrives on.
+    onDoc("mousemove", (e) => this.onLockedMove(e))
+    onDoc("pointerlockchange", () => this.onLockChange())
+    onDoc("pointerlockerror", () => this.onLockError())
   }
 
   dispose(): void {
     this.disposed = true
     cancelAnimationFrame(this.walkFrame)
+    this.releaseLook()
     for (const off of this.detach) off()
   }
 
   onChange(fn: () => void): () => void {
     this.changeListeners.add(fn)
     return () => this.changeListeners.delete(fn)
+  }
+
+  // --- pointer lock --------------------------------------------------------
+
+  /** True while the pointer is locked to the viewport and driving the look. */
+  get locked(): boolean {
+    return this.lockedState
+  }
+
+  /**
+   * Asks for the pointer, which is how a first-person look is meant to work.
+   * The browser may refuse — notably right after the user pressed Escape,
+   * where a re-request is specified to fail — and a refusal arrives at
+   * `onLock` as `false` rather than being retried or swallowed.
+   */
+  requestLook(): void {
+    if (this.lockedState || this.disposed) return
+    this.lockPending = true
+    try {
+      const result: unknown = this.dom.requestPointerLock()
+      // Reject here is the same refusal `pointerlockerror` reports; the event
+      // is the channel, so this only stops an unhandled rejection.
+      if (result instanceof Promise) result.catch(() => {})
+    } catch {
+      this.onLockError()
+    }
+  }
+
+  releaseLook(): void {
+    this.lockPending = false
+    if (document.pointerLockElement === this.dom) document.exitPointerLock()
+  }
+
+  /** Notifies on every lock, unlock, and refusal. */
+  onLock(fn: (locked: boolean) => void): () => void {
+    this.lockListeners.add(fn)
+    return () => this.lockListeners.delete(fn)
   }
 
   // --- views ---------------------------------------------------------------
@@ -107,6 +178,10 @@ export class CameraRig {
       const d = target.clone().sub(this.camera.position)
       this.yaw = Math.atan2(d.x, -d.z)
       this.pitch = Math.asin(THREE.MathUtils.clamp(d.y / (d.length() || 1), -1, 1))
+      // A programmatic move is a teleport, not a stride: the body goes with
+      // the camera and arrives with no momentum to carry on with.
+      this.body.placeEye(this.camera.position, this.eyeHeight)
+      this.drawnEye.copy(this.camera.position)
       this.applyWalk()
     } else {
       this.target.copy(target)
@@ -125,6 +200,8 @@ export class CameraRig {
     this.yaw = Math.atan2(d.x, -d.z)
     this.pitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1))
     this.mode = "walk"
+    this.body.placeEye(this.camera.position, this.eyeHeight)
+    this.drawnEye.copy(this.camera.position)
     this.lastStep = performance.now()
     this.stepWalk()
   }
@@ -133,7 +210,8 @@ export class CameraRig {
     if (this.mode === "orbit") return
     this.mode = "orbit"
     cancelAnimationFrame(this.walkFrame)
-    this.keys.clear()
+    this.releaseKeys()
+    this.releaseLook()
     // Re-seed the orbit around a point a few metres ahead of the eye.
     this.target.copy(this.camera.position).add(this.lookDirection().multiplyScalar(8))
     this.sphere.setFromVector3(this.camera.position.clone().sub(this.target))
@@ -171,6 +249,36 @@ export class CameraRig {
     for (const fn of this.changeListeners) fn()
   }
 
+  private emitLock(): void {
+    for (const fn of this.lockListeners) fn(this.lockedState)
+  }
+
+  private onLockChange(): void {
+    this.lockPending = false
+    const locked = document.pointerLockElement === this.dom
+    if (locked === this.lockedState) return
+    this.lockedState = locked
+    this.emitLock()
+  }
+
+  private onLockError(): void {
+    // The state has not changed — it was already unlocked — but a caller that
+    // asked for the pointer has to hear that it did not get it, so this fires
+    // regardless. Escape-then-request is the case that reaches here.
+    if (!this.lockPending) return
+    this.lockPending = false
+    this.lockedState = false
+    this.emitLock()
+  }
+
+  private onLockedMove(e: MouseEvent): void {
+    if (!this.lockedState || this.mode !== "walk") return
+    this.yaw += e.movementX * LOOK_SENSITIVITY
+    this.pitch -= e.movementY * LOOK_SENSITIVITY
+    this.applyWalk()
+    this.emit()
+  }
+
   private onPointerDown(e: PointerEvent): void {
     try {
       this.dom.setPointerCapture?.(e.pointerId)
@@ -189,6 +297,10 @@ export class CameraRig {
     p.x = e.clientX
     p.y = e.clientY
     if (this.mode === "walk") {
+      // Drag-to-look is the fallback for a refused lock. While the pointer is
+      // locked its client coordinates are frozen anyway, so reading them
+      // would only add noise to `movementX`.
+      if (this.lockedState) return
       this.yaw += dx * 0.0042
       this.pitch -= dy * 0.0042
       this.applyWalk()
@@ -219,45 +331,41 @@ export class CameraRig {
     this.emit()
   }
 
+  private releaseKeys(): void {
+    this.keys.clear()
+    this.sprint = false
+  }
+
   private onKey(e: KeyboardEvent, down: boolean): void {
     if (this.mode !== "walk") return
     const key = e.key.toLowerCase()
-    if (!["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+    // Shift is a modifier, not a movement key: it is never swallowed, so
+    // Shift+Tab and friends still reach the drawers.
+    if (key === "shift") {
+      this.sprint = down
       return
     }
+    if (!MOVE_KEYS.includes(key)) return
     // Typing in a drawer input must not walk the learner across the plant room.
     const t = e.target as HTMLElement | null
     if (down && t && /^(input|textarea|select)$/i.test(t.tagName)) return
     e.preventDefault()
     if (down) {
+      this.sprint = e.shiftKey
       // A discrete tap still takes a small step; holding hands over to the
-      // per-frame loop, which integrates real time.
-      if (!e.repeat && !this.keys.has(key)) this.nudge(key, 0.35)
+      // per-frame loop, which integrates real time. The tap is momentum, not
+      // a teleport, so the collider still gets to veto walking into a wall.
+      if (!e.repeat && !this.keys.has(key)) {
+        this.body.nudge(TAP_METRES, this.input(...axesFor(key)))
+      }
       this.keys.add(key)
     } else {
       this.keys.delete(key)
     }
   }
 
-  private nudge(key: string, metres: number): void {
-    const forward = key === "w" || key === "arrowup" ? 1 : key === "s" || key === "arrowdown" ? -1 : 0
-    const strafe = key === "d" || key === "arrowright" ? 1 : key === "a" || key === "arrowleft" ? -1 : 0
-    const sin = Math.sin(this.yaw)
-    const cos = Math.cos(this.yaw)
-    this.step((sin * forward + cos * strafe) * metres, (-cos * forward + sin * strafe) * metres)
-    this.applyWalk()
-    this.emit()
-  }
-
-  /** Applies a walk displacement through the collision gate, axis by axis. */
-  private step(dx: number, dz: number): void {
-    const p = this.camera.position
-    const allowed = (tx: number, tz: number) =>
-      !this.moveFilter || this.moveFilter([p.x, p.y, p.z], [tx, p.y, tz])
-    if (dx && allowed(p.x + dx, p.z)) p.x += dx
-    if (dz && allowed(p.x, p.z + dz)) p.z += dz
-    const floor = this.heightAt?.(p.x, p.z, p.y)
-    if (floor !== null && floor !== undefined) p.y = floor + this.eyeHeight
+  private input(forward: number, strafe: number): WalkInput {
+    return { forward, strafe, yaw: this.yaw, sprint: this.sprint }
   }
 
   private stepWalk = (): void => {
@@ -271,15 +379,25 @@ export class CameraRig {
     if (this.keys.has("s") || this.keys.has("arrowdown")) forward -= 1
     if (this.keys.has("d") || this.keys.has("arrowright")) strafe += 1
     if (this.keys.has("a") || this.keys.has("arrowleft")) strafe -= 1
-    if (forward || strafe) {
-      const speed = 3.4 // metres per second, a purposeful indoor pace
-      const sin = Math.sin(this.yaw)
-      const cos = Math.cos(this.yaw)
-      // Movement is planar: pitch aims the eyes, not the feet.
-      this.step((sin * forward + cos * strafe) * speed * dt, (-cos * forward + sin * strafe) * speed * dt)
+    this.body.step(dt, this.walkWorld?.walkOctree() ?? null, this.input(forward, strafe))
+    // The camera always tracks the body, but the redraw is compared against
+    // the last frame that was drawn, so a slow slide still accumulates into
+    // one rather than being filtered away a fraction of a millimetre at a time.
+    this.body.readEye(this.eye)
+    this.camera.position.copy(this.eye)
+    if (this.eye.distanceToSquared(this.drawnEye) > MOVED_EPSILON * MOVED_EPSILON) {
+      this.drawnEye.copy(this.eye)
       this.applyWalk()
       this.emit()
     }
     this.walkFrame = requestAnimationFrame(this.stepWalk)
   }
+}
+
+/** The forward/strafe axes a single movement key stands for. */
+function axesFor(key: string): [number, number] {
+  if (key === "w" || key === "arrowup") return [1, 0]
+  if (key === "s" || key === "arrowdown") return [-1, 0]
+  if (key === "d" || key === "arrowright") return [0, 1]
+  return [0, -1]
 }

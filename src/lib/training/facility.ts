@@ -41,14 +41,17 @@ export const ROOMS: TrainingRoom[] = [
   { id: "ROOM-216", name: "Room 216", level: 1, bounds: [1, 21, 13, 31] },
   { id: "ROOM-217", name: "Server room 217", level: 1, bounds: [15, 21, 25, 31] },
   { id: "ROOM-219", name: "Room 219", level: 1, bounds: [27, 21, 37, 31] },
-  { id: "CORE-L1", name: "Stair core", level: 1, bounds: [39, 21, 47, 31] },
+  // The centre of this footprint is over the stairwell, so being dropped there
+  // is a fall to the ground floor. The top landing is the floor of this room.
+  { id: "CORE-L1", name: "Stair core", level: 1, bounds: [39, 21, 47, 31], entry: [43, STOREY, 22.7] },
 ]
 
+/** Where a room places someone on foot — its entry point, or its centre. */
 export function roomCentre(id: string): Vec3 {
   const room = ROOMS.find((r) => r.id === id)
   if (!room) return [24, 0, 16]
   const [minX, minZ, maxX, maxZ] = room.bounds
-  return [(minX + maxX) / 2, room.level * STOREY, (minZ + maxZ) / 2]
+  return room.entry ?? [(minX + maxX) / 2, room.level * STOREY, (minZ + maxZ) / 2]
 }
 
 // --- fabric ----------------------------------------------------------------

@@ -651,14 +651,17 @@ class ViewerTrainingRuntime implements ViewerTraining {
     }
 
     async goToLevel(level: number): Promise<void> {
-      const entry = this.world.rooms.find((r) => r.level === level)
-      if (!entry) return
-      const [minX, minZ, maxX, maxZ] = entry.bounds
-      await this.enterWalk([
-        (minX + maxX) / 2,
-        level * this.world.storeyHeight,
-        (minZ + maxZ) / 2,
-      ])
+      const room = this.world.rooms.find((r) => r.level === level)
+      if (!room) return
+      const [minX, minZ, maxX, maxZ] = room.bounds
+      // A room can name where it is standable; its centre may be a void.
+      await this.enterWalk(
+        room.entry ?? [
+          (minX + maxX) / 2,
+          level * this.world.storeyHeight,
+          (minZ + maxZ) / 2,
+        ],
+      )
     }
 
     // --- lookups ----------------------------------------------------------

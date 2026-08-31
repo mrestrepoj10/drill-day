@@ -27,10 +27,11 @@ import { ViewerHud } from "@/components/training/viewer-hud";
 import { AgentConsole, type Drill } from "@/components/agent-console";
 import { StageStatus, useStage } from "@/components/use-stage";
 import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
+import { WalkControls, type LookMode } from "@/components/training/walk-controls";
 import { WorkspaceHeader } from "@/components/training/workspace-header";
 import { Button } from "@/components/ui/button";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const CUTAWAY_Y = LEVELS * STOREY - 0.6;
 const OVERVIEW = Stage.frame([24, 3, 16], 82, -1.05, 0.66);
@@ -180,7 +181,15 @@ const DRILLS: Drill[] = [
 ];
 
 type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
-type HoverLabel = { id: string; name: string; system: string; x: number; y: number };
+type HoverLabel = {
+  id: string;
+  name: string;
+  system: string;
+  x: number;
+  y: number;
+  /** Named by the crosshair rather than by the pointer. */
+  fromCentre: boolean;
+};
 
 
 export function TrainingDemo() {
@@ -195,6 +204,10 @@ export function TrainingDemo() {
   const [replaying, setReplaying] = useState(false);
   const [notice, setNotice] = useState<PickNotice>();
   const [hover, setHover] = useState<HoverLabel>();
+  const [looking, setLooking] = useState(false);
+  // Where the lock cannot be had, looking is a drag and the UI has to say so
+  // rather than keep inviting a click that will never take the camera.
+  const [lookMode, setLookMode] = useState<LookMode>("click");
   const [missionPaneOpen, setMissionPaneOpen] = useState(true);
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
@@ -206,11 +219,6 @@ export function TrainingDemo() {
     scene.build();
     stage.setView(OVERVIEW);
     sceneRef.current = scene;
-
-    // Walls are solid to the walker; door openings are real gaps, so the
-    // routes through the building are exactly the ones a person could take.
-    handle.rig.moveFilter = (from, to) => !stage.blocked(from, to, ["wall:", "slab:"]);
-    handle.rig.heightAt = (x, z, eyeY) => stage.groundHeight(x, z, eyeY, ["slab:", "ramp"]);
 
     void loadTraining(handle).then((nextTraining) => {
       nextTraining.setWorld({
@@ -226,6 +234,34 @@ export function TrainingDemo() {
     });
   });
 
+  /** True once this session has ever held the pointer. */
+  const everLooked = useRef(false);
+  /** A request is outstanding, so the next refusal is an answer to it. */
+  const askedLook = useRef(false);
+  /** When the lock was last given up, so Escape is not spent twice. */
+  const releasedAt = useRef(0);
+
+  useEffect(() => {
+    const stage = getStage();
+    if (!stage) return;
+    return stage.onLook((locked: boolean) => {
+      setLooking(locked);
+      if (locked) {
+        everLooked.current = true;
+        askedLook.current = false;
+        setLookMode("click");
+        return;
+      }
+      // A refusal after we have already held the lock once is the cooldown the
+      // spec imposes right after an Escape exit — transient, and clicking
+      // again works. A refusal before we have ever held it is the host saying
+      // no for good: an iframe without `allow-pointer-lock`, or no support.
+      if (askedLook.current && !everLooked.current) setLookMode("drag");
+      else releasedAt.current = performance.now();
+      askedLook.current = false;
+    });
+  }, [getStage, status]);
+
   const getTraining = useCallback(() => training, [training]);
   const subscribe = useCallback(
     (onChange: () => void) => training?.subscribe(onChange) ?? (() => {}),
@@ -234,6 +270,16 @@ export function TrainingDemo() {
   const snapshot = useCallback(() => training?.snapshot() ?? IDLE, [training]);
   const session = useSyncExternalStore(subscribe, snapshot, snapshot);
   const walking = session.status === "running" && !!session.position;
+
+  // Nobody is left holding a cursor they cannot see. The moment the drill is
+  // marked — or walking ends for any other reason — the pointer goes back on
+  // its own, so the debrief, the sidebar and the browser's own tabs are
+  // reachable without anyone having to work out that Escape was the way out.
+  const complete = session.status === "complete";
+  useEffect(() => {
+    if (walking && !complete) return;
+    getStage()?.releaseLook();
+  }, [complete, getStage, walking]);
 
   // Machine-readable session breadcrumb for automated QA (agents driving the
   // page can read position/room without scraping pixels). Invisible to users.
@@ -348,8 +394,10 @@ export function TrainingDemo() {
       if (event.key !== "Escape") return;
       // The browser is already using this Escape to hand the pointer back.
       // Closing the drawers on the same keystroke would be two things
-      // happening for one press.
+      // happening for one press — and the keydown can arrive either side of
+      // the unlock, so the moment the lock ended counts as still in use.
       if (document.pointerLockElement) return;
+      if (performance.now() - releasedAt.current < 600) return;
       setSeenCount(eventCountRef.current);
       setMissionPaneOpen(false);
       setActivityPaneOpen(false);
@@ -452,18 +500,34 @@ export function TrainingDemo() {
     pointerId: number;
     x: number;
     y: number;
-    t: number;
     maxDistance: number;
   } | null>(null);
+
+  /** Whether the camera was already ours when this press started. */
+  const heldAtPress = useRef(false);
+
+  const takeLook = useCallback(() => {
+    askedLook.current = true;
+    getStage()?.requestLook();
+  }, [getStage]);
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
     if ((event.target as Element).closest("[data-viewer-marker]")) return;
+    // Ask on the press, so the release knows whether this click bought the
+    // camera or was made with it.
+    heldAtPress.current = getStage()?.looking ?? false;
+    if (event.pointerType !== "mouse") {
+      // A finger has no pointer to lock. Looking is a drag here, and the
+      // invitation has to stop asking for a click that cannot deliver one.
+      setLookMode("drag");
+    } else if (walking && lookMode === "click" && !heldAtPress.current) {
+      takeLook();
+    }
     press.current = {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      t: performance.now(),
       maxDistance: 0,
     };
   };
@@ -476,7 +540,9 @@ export function TrainingDemo() {
         Math.hypot(event.clientX - start.x, event.clientY - start.y),
       );
     }
-    if (event.buttons !== 0 || hoverFrame.current !== null) return;
+    // Locked, the pointer has no position to hover with; the camera names what
+    // it is aimed at instead, in the rAF loop below.
+    if (looking || event.buttons !== 0 || hoverFrame.current !== null) return;
     const { clientX, clientY } = event;
     hoverFrame.current = requestAnimationFrame(() => {
       hoverFrame.current = null;
@@ -485,6 +551,7 @@ export function TrainingDemo() {
         tolerancePx: 12,
       });
       const rect = viewerRef.current?.getBoundingClientRect();
+      hoverIdRef.current = element?.id ?? null;
       setHover(element && rect
         ? {
             id: element.id,
@@ -492,17 +559,41 @@ export function TrainingDemo() {
             system: element.system,
             x: clientX - rect.left,
             y: clientY - rect.top,
+            fromCentre: false,
           }
         : undefined);
     });
   };
 
+  /** Client coords of the crosshair — the aim point while the pointer is ours. */
+  const crosshair = useCallback((): [number, number] | null => {
+    const rect = viewerRef.current?.getBoundingClientRect();
+    return rect ? [rect.left + rect.width / 2, rect.top + rect.height / 2] : null;
+  }, []);
+
   const onPointerUp = (event: React.PointerEvent) => {
     const start = press.current;
     press.current = null;
+    const held = getStage()?.looking ?? false;
+
+    if (held) {
+      // The click that took the camera bought that and nothing else; a click
+      // made while already holding it is an answer.
+      if (!heldAtPress.current) return;
+      // A locked pointer has no position, so a click cannot be a drag and
+      // there is nothing to disambiguate — the whole reason for the lock. The
+      // crosshair is the aim point, and no gate stands in front of it.
+      const centre = crosshair();
+      if (centre) answerAt(centre[0], centre[1]);
+      return;
+    }
+
+    // No lock — refused, unsupported, on a touch screen, or inside the
+    // cooldown that follows an Escape exit. A click still has to answer: a
+    // click that only ever asks for a camera it cannot have is a dead click.
     if (!start || start.pointerId !== event.pointerId) return;
-    // Looking is a drag, so a press that travelled was a look. There is no
-    // duration test: a long, still press is a real click, and timing it out
+    // Looking is a drag here, so a press that travelled was a look. There is
+    // no duration test: a long, still press is a real click, and timing it out
     // was throwing away deliberate ones while someone lined up on a valve.
     if (start.maxDistance > (event.pointerType === "touch" ? 16 : 12)) return;
     answerAt(event.clientX, event.clientY);
@@ -595,11 +686,52 @@ export function TrainingDemo() {
     }));
   }, [session.learningCuesOn, session.level, session.mission, session.step]);
 
+  /** The crosshair is over something selectable. */
+  const aimed = !!hover?.fromCentre;
+
   const hudStages = missionStages(session.mission);
   const hudStageLabel = hudStages.length
     ? `${session.stepIndex + 1} of ${hudStages.length} · ${hudStages[session.stepIndex]?.label ?? ""}`
     : "";
 
+  // While the pointer is ours, "what am I looking at" is whatever the crosshair
+  // is over, so the label has to follow the camera rather than the pointer.
+  // Throttled, and only committed when the component under the reticle actually
+  // changes — a raycast every frame to re-render the same name is wasted work.
+  useEffect(() => {
+    if (!looking) return;
+    // Taking the pointer starts from nothing known, so the same component
+    // under the reticle still counts as a change and the label comes back.
+    hoverIdRef.current = null;
+    let raf = 0;
+    let last = 0;
+    const loop = (time: number) => {
+      raf = requestAnimationFrame(loop);
+      if (time - last < 60) return;
+      last = time;
+      const rect = viewerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const element = sceneRef.current?.pick(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+        { ...pickContext(), tolerancePx: 18 },
+      );
+      if ((element?.id ?? null) === hoverIdRef.current) return;
+      hoverIdRef.current = element?.id ?? null;
+      setHover(element
+        ? {
+            id: element.id,
+            name: element.name,
+            system: element.system,
+            x: rect.width / 2,
+            y: rect.height / 2,
+            fromCentre: true,
+          }
+        : undefined);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [looking, pickContext]);
 
   const activeRole = session.mission?.role ?? roleId;
   const roleLabel = ROLES.find((role) => role.id === activeRole)?.label || activeRole || undefined;
@@ -624,10 +756,6 @@ export function TrainingDemo() {
   const challengeLabel = challengeNumber
     ? `${challengeName} of ${String(ROLES.length).padStart(2, "0")}`
     : challengeName;
-
-  // The movement tutorial has done its job once the learner has actually
-  // walked; from then on the bar carries only the objective.
-  const hasWalked = session.status === "running" && session.trail.length > 3;
 
   const toggleSection = () => {
     const next = !sectionOn;
@@ -701,11 +829,19 @@ export function TrainingDemo() {
           aria-label="Interactive building training viewer"
           className="workspace-viewer viewer-surface relative min-h-0 touch-none overflow-hidden bg-viewer-surface"
           data-walking={walking || undefined}
+          data-looking={looking || undefined}
+          data-look-mode={walking ? lookMode : undefined}
           onPointerDownCapture={onPointerDown}
           onPointerMoveCapture={onPointerMove}
           onPointerUpCapture={onPointerUp}
           onPointerCancelCapture={onPointerCancel}
           onPointerLeave={() => {
+            // While the pointer is locked the label belongs to the camera, so
+            // leaving for the sidebar must not clear it. Clearing it without
+            // also resetting the id the loop compares against is what desynced
+            // them once: the loop saw "same component, nothing to do" and the
+            // label never came back.
+            if (looking) return;
             hoverIdRef.current = null;
             setHover(undefined);
           }}
@@ -723,8 +859,36 @@ export function TrainingDemo() {
           />
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 
+          {looking ? (
+            // Honest only while the pointer is ours: with no cursor on screen,
+            // the reticle genuinely is the aim point. It opens up the moment it
+            // is over something selectable — an indicator that never reacts is
+            // one you have to be told about; this one says it itself.
+            // Monochrome, because it is chrome and state, not an accent.
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center" aria-hidden="true">
+              <div
+                className={cn(
+                  "size-4 rounded-full border transition-[transform,border-color] duration-[120ms] [transition-timing-function:var(--ease-out)] motion-reduce:transition-none",
+                  aimed ? "scale-[1.35] border-foreground" : "border-foreground/65",
+                )}
+              />
+              <div
+                className={cn(
+                  "absolute rounded-full bg-foreground transition-[width,height,opacity] duration-[120ms] [transition-timing-function:var(--ease-out)] motion-reduce:transition-none",
+                  aimed ? "size-1.5 opacity-100" : "size-1 opacity-90",
+                )}
+              />
+            </div>
+          ) : null}
 
-          {hover ? (
+          <WalkControls
+            walking={walking}
+            looking={looking}
+            mode={lookMode}
+            onLook={takeLook}
+          />
+
+          {hover && hover.fromCentre === looking ? (
             <div
               className="pointer-events-none absolute z-30 max-w-56 translate-x-3 translate-y-3 rounded-md border border-border bg-background/95 px-2.5 py-2"
               style={{ left: hover.x, top: hover.y }}
@@ -758,25 +922,16 @@ export function TrainingDemo() {
                 <span className="text-muted-foreground"> · L{session.level} · {locationLabel}</span>
               </span>
 
-              {session.status === "running" && !hasWalked ? (
-                <span className="flex items-center gap-3 text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <KbdGroup>
-                      <Kbd>W</Kbd>
-                      <Kbd>A</Kbd>
-                      <Kbd>S</Kbd>
-                      <Kbd>D</Kbd>
-                    </KbdGroup>
-                    walk
-                  </span>
-                  <span>Drag to look</span>
-                </span>
-              ) : null}
+              {/* The movement keys and the way out live on the walk controls
+                  over the model, where someone in first person is actually
+                  looking — not squeezed into a bar above it. */}
 
               {session.status === "running" ? (
                 <span className="workspace-viewer-objective flex items-center gap-1 text-muted-foreground">
                   {session.step?.mode === "reach" ? (
                     <>Reach {destinationLabel ?? "the target room"}</>
+                  ) : walking && !looking && lookMode === "click" ? (
+                    <><MousePointer2 className="size-3" aria-hidden="true" /> Click the model to look around</>
                   ) : session.selection && !session.selection.verdict ? (
                     <><MousePointer2 className="size-3" aria-hidden="true" /> Click it again to clear</>
                   ) : (
