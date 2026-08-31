@@ -22,7 +22,8 @@ import { ELEMENT_BY_ID, EYE, LEVELS, ROOMS, STOREY } from "@/lib/training/facili
 import { MISSIONS, ROLES } from "@/lib/training/missions";
 import { trainingTools } from "@/lib/training/tools";
 import { TrainingScene } from "@/components/training/scene";
-import { TrainingPanel } from "@/components/training/panel";
+import { missionStages, TrainingPanel } from "@/components/training/panel";
+import { ViewerHud } from "@/components/training/viewer-hud";
 import { AgentConsole, type Drill } from "@/components/agent-console";
 import { StageStatus, useStage } from "@/components/use-stage";
 import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
@@ -103,6 +104,7 @@ const DRILLS: Drill[] = [
         input: {
           id: "CHW-VLV-MAIN",
           note: "Closes chilled water for the whole building, server room included. Last resort, never the first move.",
+          show: true,
         },
         pause: 800,
       },
@@ -112,6 +114,7 @@ const DRILLS: Drill[] = [
         input: {
           id: "CHW-CRAC-217",
           note: "Server room cooling, fed from the same chilled water as the rest of the floor. This is the thing you are protecting.",
+          show: true,
         },
         pause: 800,
       },
@@ -120,6 +123,7 @@ const DRILLS: Drill[] = [
         input: {
           id: "CHW-RSR-01",
           note: "Every service upstairs comes up this riser, so this is where one floor can be isolated on its own.",
+          show: true,
         },
         pause: 800,
       },
@@ -506,7 +510,11 @@ export function TrainingDemo() {
     if (session.selection?.element) ids.add(session.selection.element);
     // A pinned note puts the agent's sentence on the thing it is about, rather
     // than in a panel the learner has to look away from.
-    const notes = new Map(session.annotations.map((note) => [note.id, note.note]));
+    // Numbered to match the floor plan's diamonds and the agent's own
+    // `pinnedNotes`, so all three are talking about the same note.
+    const notes = new Map(
+      session.annotations.map((note, index) => [note.id, { text: note.note, ordinal: index + 1 }]),
+    );
     for (const id of notes.keys()) ids.add(id);
     return [...ids].flatMap((id) => {
       const element = ELEMENT_BY_ID.get(id);
@@ -516,7 +524,18 @@ export function TrainingDemo() {
       return [{
         id,
         point: element.position as [number, number, number],
-        tone: verdict === "correct" ? "cool" : verdict === "near" ? "warm" : verdict ? "alert" : note ? "cool" : "neutral",
+        // A note about something on another storey recedes: the learner cannot
+        // walk to it from here, so it should not compete with what is in front
+        // of them.
+        tone: verdict === "correct"
+          ? "cool"
+          : verdict === "near"
+            ? "warm"
+            : verdict
+              ? "alert"
+              : note && element.level === session.level
+                ? "cool"
+                : "neutral",
         onSelect: session.status !== "running" || session.step?.mode === "select"
           ? () => {
               if (!training) return;
@@ -525,9 +544,13 @@ export function TrainingDemo() {
           : undefined,
         children: note ? (
           <>
-            <b className="block">{element.name}</b>
-            <span className="mt-0.5 block max-w-44 text-pretty text-[11px] font-normal leading-[1.45] opacity-90">
-              {note}
+            <b className="block">{note.ordinal}. {element.name}</b>
+            <span className="mt-0.5 block text-[10px] font-normal leading-[1.4] opacity-70">
+              {element.level === 0 ? "Ground floor" : "First floor"}
+              {element.room ? ` · ${ROOMS.find((room) => room.id === element.room)?.name ?? element.room}` : ""}
+            </span>
+            <span className="mt-1 block max-w-44 text-pretty text-[11px] font-normal leading-[1.45] opacity-90">
+              {note.text}
             </span>
           </>
         ) : (
@@ -537,6 +560,7 @@ export function TrainingDemo() {
     });
   }, [
     session.annotations,
+    session.level,
     session.revealed,
     session.selection,
     session.status,
@@ -562,6 +586,11 @@ export function TrainingDemo() {
       children: <span className="font-mono font-semibold">{String(label)}</span>,
     }));
   }, [session.learningCuesOn, session.level, session.mission, session.step]);
+
+  const hudStages = missionStages(session.mission);
+  const hudStageLabel = hudStages.length
+    ? `${session.stepIndex + 1} of ${hudStages.length} · ${hudStages[session.stepIndex]?.label ?? ""}`
+    : "";
 
   const walking = session.status === "running" && !!session.position;
   const activeRole = session.mission?.role ?? roleId;
@@ -672,6 +701,14 @@ export function TrainingDemo() {
         >
           <div ref={containerRef} className="absolute inset-0" />
           <StageStatus status={status} error={error} />
+
+          {/* Below 1500px the mission panel is a drawer, so the objective and
+              the floor plan ride on the model instead. */}
+          <ViewerHud
+            session={session}
+            stageLabel={hudStageLabel}
+            hidden={missionPaneOpen}
+          />
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 
           {walking ? (

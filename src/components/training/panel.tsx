@@ -52,6 +52,23 @@ const FLAGSHIP_STAGES = [
   { label: "Isolate", detail: "Choose the right valve" },
 ];
 
+/**
+ * The stage list, named once. The panel and the on-canvas HUD both show the
+ * open stage, and them disagreeing about what it is called would read as two
+ * different things happening.
+ */
+export function missionStages(mission: TrainingSession["mission"]): MissionStageView[] {
+  return mission?.steps.map((item, index) => ({
+    id: item.id,
+    label: mission.id === "m-technician"
+      ? FLAGSHIP_STAGES[index]?.label ?? `Stage ${index + 1}`
+      : item.mode === "reach"
+        ? "Navigate"
+        : "Select",
+    prompt: item.prompt,
+  })) ?? [];
+}
+
 export function TrainingPanel({
   session,
   onPickRole,
@@ -86,15 +103,7 @@ export function TrainingPanel({
   const highlighted = session.revealed.flatMap((hint) => hint.reveals ?? []);
   const cueElements = session.learningCuesOn ? learningCueElements(step) : [];
   const cueRooms = session.learningCuesOn ? learningCueRooms(step) : [];
-  const stages: MissionStageView[] = mission?.steps.map((item, index) => ({
-    id: item.id,
-    label: mission.id === "m-technician"
-      ? FLAGSHIP_STAGES[index]?.label ?? `Stage ${index + 1}`
-      : item.mode === "reach"
-        ? "Navigate"
-        : "Select",
-    prompt: item.prompt,
-  })) ?? [];
+  const stages = missionStages(mission);
 
   return (
     <aside
@@ -167,6 +176,7 @@ export function TrainingPanel({
                   highlighted={highlighted}
                   cueElements={cueElements}
                   cueRooms={cueRooms}
+                  annotations={session.annotations}
                   trail={session.trail}
                 />
               </div>
@@ -216,7 +226,10 @@ function MissionLaunch({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="relative aspect-[1.48/1] overflow-hidden border-b border-border">
+      {/* shrink-0: this is a flex child, and the panel's content is taller than
+          the panel at ChatGPT's default browser width. Without it the briefing
+          image is the thing flex chooses to squash, down to a sliver. */}
+      <div className="relative aspect-[1.48/1] shrink-0 overflow-hidden border-b border-border">
         <Image
           src="/media/northgate-leak-briefing.png"
           alt="Northgate maintenance corridor with an open ceiling void and chilled-water equipment"

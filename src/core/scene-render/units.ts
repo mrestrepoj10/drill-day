@@ -317,16 +317,52 @@ function tippedOntoX(buffers: GeometryBuffers): GeometryBuffers {
 }
 
 /**
- * A fire extinguisher silhouette: bottle, domed shoulder, neck and a squeeze
- * handle. Authored upright in the unit cube, base at y = −0.5.
+ * Stands an upright assembly up on end, facing +Z. Same reasoning as
+ * `tippedOntoX`: a rotation about X, never an axis swap.
+ */
+function tippedOntoZ(buffers: GeometryBuffers): GeometryBuffers {
+  const positions = buffers.positions.slice()
+  const normals = buffers.normals.slice()
+  for (const values of [positions, normals]) {
+    for (let i = 0; i < values.length; i += 3) {
+      const y = values[i + 1]
+      values[i + 1] = -values[i + 2]
+      values[i + 2] = y
+    }
+  }
+  return { positions, normals, indices: buffers.indices.slice() }
+}
+
+/**
+ * A fire extinguisher, built from the parts a learner is actually taught to
+ * check: the pressure gauge, the discharge hose, the pin through the lever,
+ * and the foot ring it stands on. The old silhouette — bottle, dome, neck,
+ * two little boxes — was recognisable at ten metres and wrong at one, which
+ * is the distance the training walk puts you at.
+ *
+ * Authored upright in the unit cube, base at y = −0.5, front facing +z. What
+ * stays out of here is anything that varies: the agent colour band, the wall
+ * bracket and the CO2 horn are per-instance decoration in `assets.ts`.
  */
 export function unitExtinguisher(): GeometryBuffers {
+  const front = 0.2 // the face the gauge and hose clip read from
   return merged([
-    placed(unitCylinder(14), [0.62, 0.72, 0.62], [0, -0.13, 0]), // bottle
-    placed(unitSphere(8, 14), [0.62, 0.36, 0.62], [0, 0.23, 0]), // shoulder dome
-    placed(unitCylinder(10), [0.16, 0.18, 0.16], [0, 0.4, 0]), // neck
-    placed(unitBox(), [0.3, 0.07, 0.09], [0.08, 0.48, 0]), // carry/squeeze lever
-    placed(unitBox(), [0.07, 0.16, 0.09], [-0.1, 0.44, 0]), // trigger grip
+    placed(unitCylinder(12), [0.68, 0.045, 0.68], [0, -0.478, 0]), // foot ring
+    placed(unitCylinder(18), [0.62, 0.7, 0.62], [0, -0.14, 0]), // bottle
+    placed(unitSphere(8, 16), [0.62, 0.36, 0.62], [0, 0.21, 0]), // shoulder dome
+    placed(unitCylinder(12), [0.2, 0.14, 0.2], [0, 0.35, 0]), // valve neck
+    placed(unitBox(), [0.26, 0.15, 0.19], [0.01, 0.43, 0]), // valve body
+    placed(unitBox(), [0.36, 0.045, 0.11], [0.06, 0.52, 0]), // squeeze lever
+    placed(unitBox(), [0.3, 0.05, 0.11], [0.04, 0.44, 0]), // carrying handle
+    placed(unitCylinder(6), [0.05, 0.26, 0.05], [-0.08, 0.48, 0]), // safety pin
+    // Gauge on a short stalk off the valve, dial toward the front — the one
+    // reading a monthly inspection actually takes.
+    placed(tippedOntoZ(unitCylinder(8)), [0.07, 0.07, 0.09], [0, 0.42, front * 0.6]),
+    placed(tippedOntoZ(unitCylinder(14)), [0.22, 0.22, 0.05], [0, 0.42, front]),
+    // Hose: out of the valve, down the side of the bottle, nozzle clipped low.
+    placed(tippedOntoX(unitCylinder(8)), [0.2, 0.07, 0.07], [-0.22, 0.4, 0]),
+    placed(unitCylinder(8), [0.07, 0.5, 0.07], [-0.31, 0.13, 0]),
+    placed(unitBox(), [0.1, 0.14, 0.09], [-0.31, -0.13, 0]), // nozzle
   ])
 }
 

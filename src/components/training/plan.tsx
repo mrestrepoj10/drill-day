@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ELEMENTS, FOOTPRINT, ROOMS, SYSTEM_COLOR } from "@/lib/training/facility";
-import type { Vec3 } from "@layer0/viewer-training";
+import { ELEMENT_BY_ID, ELEMENTS, FOOTPRINT, ROOMS, SYSTEM_COLOR } from "@/lib/training/facility";
+import type { Annotation, Vec3 } from "@layer0/viewer-training";
 
 const PAD = 3;
 /** How long a walked point stays on the plan before it has fully faded. */
@@ -26,6 +26,7 @@ export function FloorPlan({
   cueElements,
   cueRooms,
   trail,
+  annotations = [],
   onPickRoom,
 }: {
   level: number;
@@ -35,6 +36,8 @@ export function FloorPlan({
   cueElements: string[];
   cueRooms: string[];
   trail: { at: number; point: Vec3 }[];
+  /** Notes the agent has pinned, in the order it pinned them. */
+  annotations?: Annotation[];
   onPickRoom?: (roomId: string) => void;
 }) {
   const w = FOOTPRINT.x + PAD * 2;
@@ -42,6 +45,22 @@ export function FloorPlan({
   const rooms = ROOMS.filter((r) => r.level === level);
   const markedIds = new Set([...cueElements, ...highlighted]);
   const marks = ELEMENTS.filter((e) => e.level === level && markedIds.has(e.id));
+
+  // A note belongs to the storey its element sits on, and this drawing is one
+  // storey. Numbering runs across the whole set so note 3 on the plan is note 3
+  // in the agent's briefing, and the ones that fall off this drawing are
+  // counted rather than silently dropped — a note you cannot see is worse than
+  // no note, because it reads as advice that does not exist.
+  const notes = annotations.flatMap((note, i) => {
+    const element = ELEMENT_BY_ID.get(note.id);
+    return element ? [{ ...note, ordinal: i + 1, element }] : [];
+  });
+  const notesHere = notes.filter((n) => n.element.level === level);
+  const notesElsewhere = new Map<number, number>();
+  for (const n of notes) {
+    if (n.element.level === level) continue;
+    notesElsewhere.set(n.element.level, (notesElsewhere.get(n.element.level) ?? 0) + 1);
+  }
 
   // The route is working memory, not a record: it fades away behind the
   // learner. A slow tick keeps the fade advancing while they stand still.
@@ -63,7 +82,11 @@ export function FloorPlan({
       viewBox={`${-PAD} ${-PAD} ${w} ${h}`}
       className="w-full"
       role="img"
-      aria-label={`Plan of level ${level}${cueElements.length || cueRooms.length ? ", with learning cues" : ""}`}
+      aria-label={
+        `Plan of level ${level}` +
+        (cueElements.length || cueRooms.length ? ", with learning cues" : "") +
+        (notesHere.length ? `, with ${notesHere.length} pinned note${notesHere.length > 1 ? "s" : ""}` : "")
+      }
     >
       <rect x={-PAD} y={-PAD} width={w} height={h} className="fill-muted/40" />
       {rooms.map((r) => {
@@ -145,6 +168,51 @@ export function FloorPlan({
           />
         );
       })}
+
+      {/* A note is neither a cue nor a verdict, so it is not another dot: a
+          numbered tag in the agent's blue, which the learner reads as "someone
+          said something about this" rather than "answer here". */}
+      {notesHere.map((n) => (
+        <g key={n.id}>
+          <title>{`${n.ordinal}. ${n.element.name} — ${n.note}`}</title>
+          <rect
+            x={n.element.position[0] - 1.05}
+            y={n.element.position[2] - 1.05}
+            width={2.1}
+            height={2.1}
+            rx={0.35}
+            transform={`rotate(45 ${n.element.position[0]} ${n.element.position[2]})`}
+            fill="var(--interactive)"
+            stroke="var(--background)"
+            strokeWidth={0.32}
+          />
+          <text
+            x={n.element.position[0]}
+            y={n.element.position[2] + 0.48}
+            textAnchor="middle"
+            fontSize={1.35}
+            fill="var(--background)"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {n.ordinal}
+          </text>
+        </g>
+      ))}
+
+      {notesElsewhere.size > 0 ? (
+        <text
+          x={-PAD + 0.6}
+          y={FOOTPRINT.z + PAD - 0.9}
+          fontSize={1.5}
+          className="fill-muted-foreground"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          {[...notesElsewhere.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([other, count]) => `${count} more note${count > 1 ? "s" : ""} on level ${other}`)
+            .join(" · ")}
+        </text>
+      ) : null}
 
       {position && Math.abs(position[1] - 1.7 - level * 4) < 2 && (
         <g>

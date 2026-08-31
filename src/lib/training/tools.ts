@@ -49,6 +49,17 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
     return t
   }
 
+  /**
+   * Whether a step would let a tool through, asked without asking the guard.
+   * `guardTool` records a refusal when it says no, and a refusal in the shared
+   * log has to belong to a call the agent actually made — otherwise the audit
+   * trail grows blocks nobody attempted.
+   */
+  const permits = (t: ViewerTraining, name: string): boolean => {
+    const allowed = t.snapshot().step?.allowedTools
+    return !allowed || allowed.includes(name)
+  }
+
   const describe = (id: string) => {
     const t = need()
     const element = t.element(id)
@@ -115,10 +126,23 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
             why: d.verdict?.diagnosis,
           })),
           coaching: s.coaching.slice(-4),
-          pinnedNotes: s.annotations.map((a) => ({
-            element: t.element(a.id)?.name ?? a.id,
-            note: a.note,
-          })),
+          // Numbered and placed. A note is pinned in a building with two
+          // storeys, so "the valve I flagged" is ambiguous until the floor is
+          // said out loud — and the plan beside the learner numbers them the
+          // same way, so the briefing and the drawing agree.
+          pinnedNotes: s.annotations.map((a, i) => {
+            const element = t.element(a.id)
+            return {
+              number: i + 1,
+              id: a.id,
+              element: element?.name ?? a.id,
+              level: element?.level,
+              floor: element ? floorName(element.level) : undefined,
+              room: element?.room ? ROOMS.find((r) => r.id === element.room)?.name ?? element.room : undefined,
+              onThisLevel: element ? element.level === s.level : undefined,
+              note: a.note,
+            }
+          }),
         }
       },
     },
@@ -417,20 +441,49 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       name: "training_annotate",
       title: "Pin a note in the scene",
       description:
-        "Pins one sentence onto an element, where the learner is already looking, instead of adding " +
-        "another line to a panel they have to read. One note per element; they clear when the step " +
-        "changes. Pass clearAll to take them all down at once.",
+        "Pins one sentence onto an element, in the scene and on the floor plan, where the learner is " +
+        "already looking. Write it for the person standing in front of the thing, not for a drawing " +
+        "register: one plain sentence, no jargon, and never a bare tag code — say \"the valve on the " +
+        "corridor ceiling above you\" and put the tag in brackets if it matters. Say what it means for " +
+        "them — what stops, who notices, what to check first — not what the property sheet says. One " +
+        "note per element; they clear when the step changes. Set show to bring the camera with you so " +
+        "they see each one in place. Pass clearAll to take them all down at once.",
       inputSchema: schema({
         id: { type: "string", maxLength: 80 },
         note: { type: "string", minLength: 1, maxLength: 220 },
+        show: {
+          type: "boolean",
+          description: "Frame the element as the note lands, so pinning reads as a walkthrough",
+        },
         clearAll: { type: "boolean", description: "Remove every pinned note instead of adding one" },
       }),
-      execute: ({ id, note, clearAll }: { id?: string; note?: string; clearAll?: boolean }) => {
+      execute: async (input: { id?: string; note?: string; show?: boolean; clearAll?: boolean }) => {
+        const { id, note, show, clearAll } = input
         const t = guard("training_annotate")
         if (clearAll) return { cleared: t.clearAnnotations() }
         if (!id || !note) throw new Error("pass both id and note, or clearAll: true")
         const pinned = t.annotate(id, note)
-        return { pinnedTo: t.element(id)?.name ?? id, note: pinned.note }
+        // Annotating is allowed on steps that withhold locating, so the camera
+        // has to ask the same question training_locate_element would be asked.
+        // Moving it anyway would make "you may not show them where it is" a
+        // rule with a note-shaped hole in it.
+        const framed = Boolean(show) && permits(t, "training_locate_element")
+        if (framed) {
+          const [x, y, z] = t.element(id)!.position
+          await t.applyViewerState({ camera: { position: [x + 7, y + 5, z + 7], target: [x, y, z] } })
+        }
+        return {
+          pinnedTo: t.element(id)?.name ?? id,
+          note: pinned.note,
+          framed,
+          ...(show && !framed
+            ? {
+                cameraHeld:
+                  "training_locate_element is switched off on this step, so the note is pinned but the " +
+                  "camera stayed where it was. Describe where it is instead — do not retry with show.",
+              }
+            : {}),
+        }
       },
     },
     {
@@ -589,6 +642,15 @@ function compile(input: AuthoredMission, t: ViewerTraining): Mission {
     author: "agent",
     steps,
   }
+}
+
+/**
+ * What the people in this building call the storey. The model counts from
+ * zero; nobody standing in it says "level 0", and a briefing that does sounds
+ * like it was written by the drawing.
+ */
+function floorName(level: number): string {
+  return level === 0 ? "ground floor" : level === 1 ? "first floor" : `level ${level}`
 }
 
 function pathLength(trail: { at: number; point: [number, number, number] }[]): number {

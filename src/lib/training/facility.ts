@@ -73,7 +73,12 @@ interface WallSpec {
   x2: number
   z2: number
   level: number
-  /** Door openings along the run, as distances from the start. */
+  /**
+   * Door openings along the run, as distances from the start — which is what
+   * every run that begins at the origin made it look like, until the one run
+   * that starts at x = 22 put both of its openings behind its own start and
+   * sealed the stair core off from the rest of the building.
+   */
   doors?: { at: number; width?: number }[]
   thickness?: number
   height?: number
@@ -148,7 +153,10 @@ export function walls(): WallPiece[] {
     const y = spec.level * STOREY + h / 2
 
     const cuts = (spec.doors ?? [])
-      .map((d) => ({ from: d.at - (d.width ?? 1) / 2, to: d.at + (d.width ?? 1) / 2 }))
+      .map((d) => {
+        const at = start + d.at
+        return { from: at - (d.width ?? 1) / 2, to: at + (d.width ?? 1) / 2 }
+      })
       .sort((a, b) => a.from - b.from)
 
     let cursor = start
@@ -197,15 +205,17 @@ export function doors(): Opening[] {
   const out: Opening[] = []
   WALLS.forEach((spec, n) => {
     const horizontal = spec.z1 === spec.z2
+    const start = horizontal ? spec.x1 : spec.z1
     const fixed = horizontal ? spec.z1 : spec.x1
     const t = spec.thickness ?? WALL_T
     const y = spec.level * STOREY
     const envelope = spec.x1 === spec.x2 ? fixed === 0 || fixed === 48 : fixed === 0 || fixed === 32
     ;(spec.doors ?? []).forEach((door, k) => {
       const width = door.width ?? 1
+      const at = start + door.at
       out.push({
         id: `door-${n}-${k}`,
-        position: horizontal ? [door.at, y, fixed] : [fixed, y, door.at],
+        position: horizontal ? [at, y, fixed] : [fixed, y, at],
         width,
         height: width > 3 ? 3.2 : DOOR_H,
         thickness: t,
@@ -217,13 +227,21 @@ export function doors(): Opening[] {
   return out
 }
 
+/**
+ * Where the level-1 slab stops and the stair core opens up to the storey
+ * below. The stair's top landing is set out from these two edges, so the
+ * landing meets the slab instead of hovering near it.
+ */
+export const CORE_VOID = { x: 39, z: 22 }
+
 /** Floor slabs, one per level, with a void over the stair core. */
 export function slabs(): Slab[] {
   const out: Slab[] = []
   for (let level = 0; level < LEVELS; level++) {
     const y = level * STOREY
     // The core is open from ground to first, so the level-1 slab is split
-    // around it rather than laid as one piece.
+    // around it rather than laid as one piece. `slab-1-w` stops at
+    // CORE_VOID.x, `slab-1-c` at CORE_VOID.z.
     if (level === 0) {
       out.push({ id: `slab-${level}`, position: [24, y - 0.15, 16], size: [50, 0.3, 34] })
     } else {
@@ -235,21 +253,253 @@ export function slabs(): Slab[] {
   // Roof.
   out.push({ id: "roof", position: [24, LEVELS * STOREY - 0.15, 16], size: [50, 0.3, 34] })
   // Apron outside the west exit, so the assembly point stands on something.
-  out.push({ id: "apron", position: [-6, -0.15, 16], size: [14, 0.3, 20] })
+  // It butts against the ground slab's overhang at x = −1 rather than lapping
+  // over it: two coplanar tops fighting for the same pixels is the first thing
+  // that reads as broken when you walk out of the building.
+  out.push({ id: "apron", position: [-7, -0.15, 16], size: [12, 0.3, 20] })
+  // The yard on the east face, under the dry riser inlet and the dock.
+  out.push({ id: "apron-east", position: [52, -0.15, 9], size: [6, 0.3, 18] })
   return out
 }
 
+// --- the stair -------------------------------------------------------------
+
 /**
- * The ramp up to level one, inside the stair core. A straight run rather than
- * a stair: the walk rig climbs a slope reliably on runtime geometry, and a flight of
- * treads is a lot of instances for something you cross twice.
+ * A switchback stair, set out from the riser and the going rather than drawn
+ * as a shape.
+ *
+ * Two flights of twelve 167 mm risers on a 300 mm going climb the 4 m storey,
+ * turning on a half landing. The top landing lands on the level-1 slab edge so
+ * the walker steps off it onto the floor plate with no gap to fall through,
+ * and the bottom of the first flight sits under the core's only ground-floor
+ * door.
+ *
+ * The pieces are typed by what they do, not by what they look like, because
+ * the walk rig reads the scene through id prefixes: treads and landings must
+ * be found by the ground probe, the understair enclosure must be found by the
+ * collision test, and the balustrade must be found by neither.
  */
-export const RAMP = {
-  id: "ramp",
-  position: [43, STOREY / 2, 26] as Vec3,
-  size: [5, 0.3, 12.6] as Vec3,
-  /** Aim the slab's up-axis so the surface climbs toward +z. */
-  direction: [0, Math.cos(0.322), -Math.sin(0.322)] as Vec3,
+export type StairRole = "tread" | "nosing" | "structure" | "enclosure" | "guard"
+
+export interface StairPiece {
+  key: string
+  role: StairRole
+  position: Vec3
+  size: Vec3
+  /** Aims the piece's up-axis, for the raking waists and handrails. */
+  direction?: Vec3
+  shape?: "box" | "cylinder"
+}
+
+const STAIR = {
+  /** Per flight; two flights of twelve make the storey. */
+  risers: 12,
+  going: 0.3,
+  width: 1.4,
+  /** The well between the flights — what the two inner balustrades face across. */
+  well: 0.4,
+  /** West edge of the up flight, lined up under the core's ground-floor door. */
+  x0: 42.3,
+  /** Bottom riser face, one landing depth south of the slab edge above. */
+  z0: 22.8,
+  /** A closed riser: the tread box carries the step below it down with it. */
+  tread: 0.3,
+  landing: 1.4,
+  /**
+   * West edge of the top landing. Stops clear of the dry riser at x = 40.5 so
+   * the riser rises past the landing edge, with its landing valve over it.
+   */
+  topWest: 40.9,
+  /** Handrail heights: off the pitch line, and off a landing. */
+  railRake: 0.95,
+  railLevel: 1.1,
+}
+
+export function stair(): StairPiece[] {
+  const rise = STOREY / (STAIR.risers * 2)
+  const run = (STAIR.risers - 1) * STAIR.going
+  const w = STAIR.width
+  const upX = STAIR.x0 + w / 2
+  const downX = STAIR.x0 + w * 1.5 + STAIR.well
+  const half = STOREY / 2
+  /** Near edge of the half landing, and the top of the first flight. */
+  const zTurn = STAIR.z0 + run
+  const out: StairPiece[] = []
+
+  // One box per step, a closed riser deep, so a flight reads as treads and
+  // risers from the side instead of as a slope with lines drawn on it.
+  for (let n = 1; n < STAIR.risers; n++) {
+    const step = String(n).padStart(2, "0")
+    for (const [flight, x, y, z] of [
+      ["flight1", upX, n * rise, STAIR.z0 + (n - 0.5) * STAIR.going],
+      ["flight2", downX, half + n * rise, zTurn - (n - 0.5) * STAIR.going],
+    ] as const) {
+      out.push({
+        key: `${flight}-tread-${step}`,
+        role: "tread",
+        position: [x, y - STAIR.tread / 2, z],
+        size: [w, STAIR.tread, STAIR.going],
+      })
+      // Contrasting nosings are the one thing that makes a flight readable at
+      // a glance from the far side of the core — and they are a real stair's
+      // accessibility detail, not decoration.
+      const lead = flight === "flight1" ? -1 : 1
+      out.push({
+        key: `${flight}-nosing-${step}`,
+        role: "nosing",
+        position: [x, y + 0.004, z + (lead * (STAIR.going - 0.055)) / 2],
+        size: [w * 0.94, 0.012, 0.055],
+      })
+    }
+  }
+
+  out.push({
+    key: "landing-half",
+    role: "tread",
+    position: [(upX + downX) / 2, half - 0.1, zTurn + STAIR.landing / 2],
+    size: [downX - upX + w, 0.2, STAIR.landing],
+  })
+
+  // The top landing runs from the slab edge back to the head of the return
+  // flight, and reaches west far enough to stand at the 1F landing valve.
+  const topDepth = STAIR.z0 - CORE_VOID.z
+  const topEast = downX + w / 2
+  out.push({
+    key: "landing-top",
+    role: "tread",
+    position: [(STAIR.topWest + topEast) / 2, STOREY - 0.15, CORE_VOID.z + topDepth / 2],
+    size: [topEast - STAIR.topWest, 0.3, topDepth],
+  })
+
+  // The pitch line of each flight: the line the nosings sit on, extended to
+  // the floor it leaves and the landing it meets. Everything raking — waist
+  // and handrail — is set out from it.
+  const pitch = Math.atan2(rise, STAIR.going)
+  const flights = [
+    { key: "flight1", x: upX, zA: STAIR.z0 - STAIR.going, yA: 0, zB: zTurn, yB: half, sense: 1 },
+    { key: "flight2", x: downX, zA: zTurn + STAIR.going, yA: half, zB: STAIR.z0, yB: STOREY, sense: -1 },
+  ] as const
+
+  const waist = 0.22
+  for (const f of flights) {
+    const length = Math.hypot(f.zB - f.zA, f.yB - f.yA)
+    // Slung under the tread soffits, half its own thickness below them.
+    const up: Vec3 = [0, Math.cos(pitch), -Math.sin(pitch) * f.sense]
+    out.push({
+      key: `${f.key}-waist`,
+      role: "structure",
+      position: [
+        f.x,
+        (f.yA + f.yB) / 2 - STAIR.tread - (waist / 2) * Math.cos(pitch),
+        (f.zA + f.zB) / 2 + ((waist / 2) * Math.sin(pitch)) * f.sense,
+      ],
+      size: [w, waist, length],
+      direction: up,
+    })
+
+    // Balustrades either side of every flight: one facing the core, one facing
+    // the well.
+    for (const [side, offset] of [["west", -w / 2 + 0.05], ["east", w / 2 - 0.05]] as const) {
+      out.push(...rakingGuard(`${f.key}-${side}`, f.x + offset, f))
+    }
+  }
+
+  // The understair enclosure. Headroom under the return flight and the half
+  // landing is below head height, so it is boxed in — which is what a real
+  // core does with it, and what stops the walker strolling into the soffit.
+  const storeH = 1.76
+  out.push({
+    key: "stair-store",
+    role: "enclosure",
+    position: [(upX + downX) / 2, storeH / 2, zTurn + STAIR.landing / 2],
+    size: [downX - upX + w, storeH, STAIR.landing],
+  })
+  out.push({
+    key: "stair-spandrel",
+    role: "enclosure",
+    position: [downX, storeH / 2, zTurn - 0.3],
+    size: [w, storeH, 0.6],
+  })
+
+  const westEdge = STAIR.x0 + 0.05
+  const eastEdge = downX + w / 2 - 0.05
+  out.push(
+    ...levelGuard("half-south", westEdge, zTurn + STAIR.landing - 0.05, eastEdge, zTurn + STAIR.landing - 0.05, half),
+    ...levelGuard("half-west", westEdge, zTurn, westEdge, zTurn + STAIR.landing, half),
+    ...levelGuard("half-east", eastEdge, zTurn, eastEdge, zTurn + STAIR.landing, half),
+    // The head of the stair, and the slab edge either side of it: the drop
+    // into the stairwell is the one thing on level 1 you can walk off.
+    ...levelGuard("top-south", STAIR.topWest + 0.05, STAIR.z0 - 0.05, downX - w / 2, STAIR.z0 - 0.05, STOREY),
+    ...levelGuard("top-west", STAIR.topWest + 0.05, CORE_VOID.z, STAIR.topWest + 0.05, STAIR.z0, STOREY),
+    ...levelGuard("void-west", CORE_VOID.x + 0.05, CORE_VOID.z + 0.05, STAIR.topWest, CORE_VOID.z + 0.05, STOREY),
+    ...levelGuard("void-east", topEast, CORE_VOID.z + 0.05, 47.8, CORE_VOID.z + 0.05, STOREY),
+  )
+
+  return out
+}
+
+/** Handrail and standards along a flight's pitch line. */
+function rakingGuard(
+  key: string,
+  x: number,
+  f: { zA: number; yA: number; zB: number; yB: number },
+): StairPiece[] {
+  const dz = f.zB - f.zA
+  const dy = f.yB - f.yA
+  const length = Math.hypot(dz, dy)
+  const out: StairPiece[] = [{
+    key: `rail-${key}`,
+    role: "guard",
+    shape: "cylinder",
+    position: [x, (f.yA + f.yB) / 2 + STAIR.railRake, (f.zA + f.zB) / 2],
+    size: [0.05, length, 0.05],
+    direction: [0, dy / length, dz / length],
+  }]
+  for (const t of [0.1, 0.37, 0.64, 0.91]) {
+    out.push({
+      key: `post-${key}-${t}`,
+      role: "guard",
+      position: [x, f.yA + dy * t + STAIR.railRake / 2, f.zA + dz * t],
+      size: [0.045, STAIR.railRake, 0.045],
+    })
+  }
+  return out
+}
+
+/** Handrail and standards along a landing or slab edge. Axis-aligned runs. */
+function levelGuard(
+  key: string,
+  x1: number,
+  z1: number,
+  x2: number,
+  z2: number,
+  floorY: number,
+): StairPiece[] {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1)
+  const length = Math.hypot(x2 - x1, z2 - z1)
+  const out: StairPiece[] = [{
+    key: `rail-${key}`,
+    role: "guard",
+    shape: "cylinder",
+    position: [(x1 + x2) / 2, floorY + STAIR.railLevel, (z1 + z2) / 2],
+    size: [0.05, length, 0.05],
+    direction: alongX ? [1, 0, 0] : [0, 0, 1],
+  }]
+  const posts = Math.max(2, Math.round(length / 1.3) + 1)
+  for (let n = 0; n < posts; n++) {
+    const t = n / (posts - 1)
+    out.push({
+      key: `post-${key}-${n}`,
+      role: "guard",
+      position: [
+        x1 + (x2 - x1) * t,
+        floorY + STAIR.railLevel / 2,
+        z1 + (z2 - z1) * t,
+      ],
+      size: [0.045, STAIR.railLevel, 0.045],
+    })
+  }
+  return out
 }
 
 // --- the service catalogue -------------------------------------------------
