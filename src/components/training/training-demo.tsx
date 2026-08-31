@@ -196,6 +196,7 @@ export function TrainingDemo() {
   const [replaying, setReplaying] = useState(false);
   const [notice, setNotice] = useState<PickNotice>();
   const [hover, setHover] = useState<HoverLabel>();
+  const [looking, setLooking] = useState(false);
   const [missionPaneOpen, setMissionPaneOpen] = useState(true);
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
@@ -226,6 +227,12 @@ export function TrainingDemo() {
       setTraining(nextTraining);
     });
   });
+
+  useEffect(() => {
+    const stage = getStage();
+    if (!stage) return;
+    return stage.onLook(setLooking);
+  }, [getStage, status]);
 
   const getTraining = useCallback(() => training, [training]);
   const subscribe = useCallback(
@@ -347,6 +354,10 @@ export function TrainingDemo() {
   useEffect(() => {
     const closeCompactPanes = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // The browser is already using this Escape to hand the pointer back.
+      // Closing the drawers on the same keystroke would be two things
+      // happening for one press.
+      if (document.pointerLockElement) return;
       setSeenCount(eventCountRef.current);
       setMissionPaneOpen(false);
       setActivityPaneOpen(false);
@@ -504,15 +515,30 @@ export function TrainingDemo() {
   const onPointerUp = (event: React.PointerEvent) => {
     const start = press.current;
     press.current = null;
+
+    // Locked: the pointer has no position, so a click cannot be a drag and
+    // there is nothing to disambiguate. This is the whole reason for the lock
+    // — the distance and duration gates below were throwing away real clicks
+    // that drifted a few pixels or took longer than they were allowed to.
+    if (looking) {
+      const centre = crosshair();
+      if (centre) answerAt(centre[0], centre[1]);
+      return;
+    }
+
+    // Walking but not locked, either because the browser refused or because
+    // the learner has not engaged yet: the first click asks for the lock
+    // rather than answering, so nobody selects something by accident on the
+    // click that was meant to take control of the camera.
+    if (walking) {
+      getStage()?.requestLook();
+      return;
+    }
+
     if (!start || start.pointerId !== event.pointerId) return;
     if (start.maxDistance > (event.pointerType === "touch" ? 14 : 9)) return;
     if (performance.now() - start.t > 700) return;
-    // In first person the crosshair is what is aiming, so that is what answers.
-    // Picking by pointer while a reticle sits in the middle of the screen gives
-    // two aim points and only one of them works.
-    const centre = walking ? crosshair() : null;
-    if (centre) answerAt(centre[0], centre[1]);
-    else answerAt(event.clientX, event.clientY);
+    answerAt(event.clientX, event.clientY);
   };
 
   const onPointerCancel = () => {
@@ -749,6 +775,7 @@ export function TrainingDemo() {
           aria-label="Interactive building training viewer"
           className="workspace-viewer viewer-surface relative min-h-0 touch-none overflow-hidden bg-viewer-surface"
           data-walking={walking || undefined}
+          data-looking={looking || undefined}
           onPointerDownCapture={onPointerDown}
           onPointerMoveCapture={onPointerMove}
           onPointerUpCapture={onPointerUp}
@@ -834,18 +861,22 @@ export function TrainingDemo() {
                 <span className="text-muted-foreground"> · L{session.level} · {locationLabel}</span>
               </span>
 
-              {session.status === "running" && !hasWalked ? (
+              {session.status === "running" && looking ? (
                 <span className="flex items-center gap-3 text-muted-foreground">
+                  {!hasWalked ? (
+                    <span className="flex items-center gap-1.5">
+                      <KbdGroup>
+                        <Kbd>W</Kbd>
+                        <Kbd>A</Kbd>
+                        <Kbd>S</Kbd>
+                        <Kbd>D</Kbd>
+                      </KbdGroup>
+                      walk
+                    </span>
+                  ) : null}
                   <span className="flex items-center gap-1.5">
-                    <KbdGroup>
-                      <Kbd>W</Kbd>
-                      <Kbd>A</Kbd>
-                      <Kbd>S</Kbd>
-                      <Kbd>D</Kbd>
-                    </KbdGroup>
-                    walk
+                    <Kbd>Esc</Kbd> release
                   </span>
-                  <span>Drag to look</span>
                 </span>
               ) : null}
 
@@ -853,6 +884,8 @@ export function TrainingDemo() {
                 <span className="workspace-viewer-objective flex items-center gap-1 text-muted-foreground">
                   {session.step?.mode === "reach" ? (
                     <>Reach {destinationLabel ?? "the target room"}</>
+                  ) : !looking ? (
+                    <><MousePointer2 className="size-3" aria-hidden="true" /> Click the model to look around</>
                   ) : session.selection && !session.selection.verdict ? (
                     <><MousePointer2 className="size-3" aria-hidden="true" /> Click it again to clear</>
                   ) : (

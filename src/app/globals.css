@@ -296,17 +296,16 @@ a {
   color: inherit;
 }
 
-/* In first person the crosshair is the aim point — clicks and the component
-   label both read it — so the pointer is not a second one. Hiding it is what
-   makes the reticle true rather than decorative. */
-.workspace-viewer[data-walking] {
-  cursor: none;
+/* Walking but not yet holding the camera: the whole surface is "click to look
+   around", so say so. Once the pointer is locked the browser hides it for us
+   and the crosshair is the only mark on screen — no cursor rules needed. */
+.workspace-viewer[data-walking]:not([data-looking]) {
+  cursor: pointer;
 }
 
-/* Except over the labels, which are real buttons. An invisible pointer over a
-   click target is a worse trade than a pointer that reappears on one. */
-.workspace-viewer[data-walking] [data-viewer-marker] {
-  cursor: pointer;
+/* Locked, the pointer does not exist, so neither do its click targets. */
+.workspace-viewer[data-looking] [data-viewer-marker] {
+  pointer-events: none;
 }
 
 /* Objective + floor plan, pinned to the model.
