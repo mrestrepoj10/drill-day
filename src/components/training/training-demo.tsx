@@ -30,6 +30,7 @@ import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
 import { WorkspaceHeader } from "@/components/training/workspace-header";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CUTAWAY_Y = LEVELS * STOREY - 0.6;
@@ -601,6 +602,9 @@ export function TrainingDemo() {
     }));
   }, [session.learningCuesOn, session.level, session.mission, session.step]);
 
+  /** The crosshair is over something selectable. */
+  const aimed = !!hover?.fromCentre;
+
   const hudStages = missionStages(session.mission);
   const hudStageLabel = hudStages.length
     ? `${session.stepIndex + 1} of ${hudStages.length} · ${hudStages[session.stepIndex]?.label ?? ""}`
@@ -762,9 +766,24 @@ export function TrainingDemo() {
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 
           {walking ? (
+            // The reticle answers the question the label also answers, half a
+            // beat sooner: it opens up the moment it is over something you can
+            // select. An indicator that never reacts is one you have to be
+            // told about; this one says it itself. Monochrome, because it is
+            // chrome and state, not an accent.
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center" aria-hidden="true">
-              <div className="size-4 rounded-full border border-foreground/65" />
-              <div className="absolute size-1 rounded-full bg-foreground/90" />
+              <div
+                className={cn(
+                  "size-4 rounded-full border transition-[transform,border-color] duration-[120ms] [transition-timing-function:var(--ease-out)] motion-reduce:transition-none",
+                  aimed ? "scale-[1.35] border-foreground" : "border-foreground/65",
+                )}
+              />
+              <div
+                className={cn(
+                  "absolute rounded-full bg-foreground transition-[width,height,opacity] duration-[120ms] [transition-timing-function:var(--ease-out)] motion-reduce:transition-none",
+                  aimed ? "size-1.5 opacity-100" : "size-1 opacity-90",
+                )}
+              />
             </div>
           ) : null}
 

@@ -78,7 +78,7 @@ export const MISSIONS: Record<string, Mission> = {
       {
         id: "t2",
         mode: "select",
-        prompt: "Look above the missing ceiling tile. Put the crosshair on a component to name it, then select the source of the leak.",
+        prompt: "Look above the missing ceiling tile. The crosshair names whatever it opens up on — select the source of the leak.",
         startState: { walkTo: [20, L1, 10], facing: [20, L1, 3] },
         validSelections: ["CHW-DROP-214"],
         nearMisses: [
