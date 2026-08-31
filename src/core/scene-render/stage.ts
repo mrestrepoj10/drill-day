@@ -398,29 +398,6 @@ export class Stage {
 
   // --- camera -------------------------------------------------------------
 
-  // --- first person ---------------------------------------------------------
-
-  /**
-   * Ask for pointer lock. Must come from a user gesture; a refusal is fine,
-   * the rig falls back to drag-to-look.
-   */
-  requestLook(): void {
-    this.handle.rig.requestLook()
-  }
-
-  releaseLook(): void {
-    this.handle.rig.releaseLook()
-  }
-
-  get looking(): boolean {
-    return this.handle.rig.locked
-  }
-
-  /** Notifies on lock and unlock, so the UI can say which state it is in. */
-  onLook(fn: (locked: boolean) => void): () => void {
-    return this.handle.rig.onLock(fn)
-  }
-
   /** Snaps the camera. */
   setView(view: CameraView): void {
     this.cameraAnimation++

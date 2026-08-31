@@ -78,7 +78,7 @@ export const MISSIONS: Record<string, Mission> = {
       {
         id: "t2",
         mode: "select",
-        prompt: "Look above the missing ceiling tile. The crosshair names whatever it opens up on — select the source of the leak.",
+        prompt: "Look above the missing ceiling tile. Hover to identify components, then select the source of the leak.",
         startState: { walkTo: [20, L1, 10], facing: [20, L1, 3] },
         validSelections: ["CHW-DROP-214"],
         nearMisses: [
@@ -107,7 +107,7 @@ export const MISSIONS: Record<string, Mission> = {
         prompt:
           "Trace the pipe upstream. Select the nearest chilled-water valve that stops this leak without shutting down the whole building.",
         guidance:
-          "The valve is not in Room 214. Leave the room and cross the corridor to the Level 1 riser cupboard, then put the crosshair on each of the paired valves to tell chilled water from heating.",
+          "The valve is not in Room 214. Leave the room and cross the corridor to the Level 1 riser cupboard, then hover over the paired valves in 3D to distinguish chilled water from heating.",
         validSelections: ["CHW-VLV-L1"],
         nearMisses: [
           {

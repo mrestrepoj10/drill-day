@@ -296,18 +296,6 @@ a {
   color: inherit;
 }
 
-/* Walking but not yet holding the camera: the whole surface is "click to look
-   around", so say so. Once the pointer is locked the browser hides it for us
-   and the crosshair is the only mark on screen — no cursor rules needed. */
-.workspace-viewer[data-walking]:not([data-looking]) {
-  cursor: pointer;
-}
-
-/* Locked, the pointer does not exist, so neither do its click targets. */
-.workspace-viewer[data-looking] [data-viewer-marker] {
-  pointer-events: none;
-}
-
 /* Objective + floor plan, pinned to the model.
    Only below 1500px, where the mission panel is a drawer and would otherwise
    take both away with it. Bottom-left, so the centre of the canvas stays the

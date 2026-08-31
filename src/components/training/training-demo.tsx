@@ -30,7 +30,6 @@ import { ViewerMarkers, type Marker } from "@/components/viewer-markers";
 import { WorkspaceHeader } from "@/components/training/workspace-header";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const CUTAWAY_Y = LEVELS * STOREY - 0.6;
@@ -181,7 +180,7 @@ const DRILLS: Drill[] = [
 ];
 
 type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
-type HoverLabel = { id: string; name: string; system: string; x: number; y: number; fromCentre: boolean };
+type HoverLabel = { id: string; name: string; system: string; x: number; y: number };
 
 
 export function TrainingDemo() {
@@ -196,7 +195,6 @@ export function TrainingDemo() {
   const [replaying, setReplaying] = useState(false);
   const [notice, setNotice] = useState<PickNotice>();
   const [hover, setHover] = useState<HoverLabel>();
-  const [looking, setLooking] = useState(false);
   const [missionPaneOpen, setMissionPaneOpen] = useState(true);
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
@@ -227,12 +225,6 @@ export function TrainingDemo() {
       setTraining(nextTraining);
     });
   });
-
-  useEffect(() => {
-    const stage = getStage();
-    if (!stage) return;
-    return stage.onLook(setLooking);
-  }, [getStage, status]);
 
   const getTraining = useCallback(() => training, [training]);
   const subscribe = useCallback(
@@ -464,16 +456,9 @@ export function TrainingDemo() {
     maxDistance: number;
   } | null>(null);
 
-  /** Whether the camera was already ours when this press started. */
-  const heldAtPress = useRef(false);
-
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
     if ((event.target as Element).closest("[data-viewer-marker]")) return;
-    // Ask on the press, so the release knows whether this click bought the
-    // camera or was made with it.
-    heldAtPress.current = getStage()?.looking ?? false;
-    if (walking && !heldAtPress.current) getStage()?.requestLook();
     press.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -491,7 +476,7 @@ export function TrainingDemo() {
         Math.hypot(event.clientX - start.x, event.clientY - start.y),
       );
     }
-    if (walking || event.buttons !== 0 || hoverFrame.current !== null) return;
+    if (event.buttons !== 0 || hoverFrame.current !== null) return;
     const { clientX, clientY } = event;
     hoverFrame.current = requestAnimationFrame(() => {
       hoverFrame.current = null;
@@ -507,47 +492,20 @@ export function TrainingDemo() {
             system: element.system,
             x: clientX - rect.left,
             y: clientY - rect.top,
-            fromCentre: false,
           }
         : undefined);
     });
   };
 
-  /** Client coords of the crosshair — the aim point while walking. */
-  const crosshair = useCallback((): [number, number] | null => {
-    const rect = viewerRef.current?.getBoundingClientRect();
-    return rect ? [rect.left + rect.width / 2, rect.top + rect.height / 2] : null;
-  }, []);
-
   const onPointerUp = (event: React.PointerEvent) => {
     const start = press.current;
     press.current = null;
-    const held = getStage()?.looking ?? false;
-
-    if (held) {
-      // The click that took the camera bought that and nothing else; a click
-      // made while already holding it is an answer.
-      if (!heldAtPress.current) return;
-      // Locked, the pointer has no position, so a click cannot be a drag and
-      // there is nothing to disambiguate — the whole reason for the lock. The
-      // gates below were throwing away real clicks that drifted a few pixels
-      // or took longer than they were allowed to.
-      const centre = crosshair();
-      if (centre) answerAt(centre[0], centre[1]);
-      return;
-    }
-
-    // No lock: refused in an iframe, unsupported, or inside the cooldown the
-    // spec imposes right after an Escape exit. Clicking still has to answer —
-    // a click that only ever asks for a camera it cannot have is a dead click
-    // — and with drag-to-look back in play the gates below mean something
-    // again.
     if (!start || start.pointerId !== event.pointerId) return;
-    if (start.maxDistance > (event.pointerType === "touch" ? 14 : 9)) return;
-    if (performance.now() - start.t > 700) return;
-    const centre = walking ? crosshair() : null;
-    if (centre) answerAt(centre[0], centre[1]);
-    else answerAt(event.clientX, event.clientY);
+    // Looking is a drag, so a press that travelled was a look. There is no
+    // duration test: a long, still press is a real click, and timing it out
+    // was throwing away deliberate ones while someone lined up on a valve.
+    if (start.maxDistance > (event.pointerType === "touch" ? 16 : 12)) return;
+    answerAt(event.clientX, event.clientY);
   };
 
   const onPointerCancel = () => {
@@ -637,53 +595,12 @@ export function TrainingDemo() {
     }));
   }, [session.learningCuesOn, session.level, session.mission, session.step]);
 
-  /** The crosshair is over something selectable. */
-  const aimed = !!hover?.fromCentre;
-
   const hudStages = missionStages(session.mission);
   const hudStageLabel = hudStages.length
     ? `${session.stepIndex + 1} of ${hudStages.length} · ${hudStages[session.stepIndex]?.label ?? ""}`
     : "";
 
 
-  // While walking, "what am I looking at" is whatever the crosshair is over, so
-  // the label has to follow the camera rather than the pointer. Throttled and
-  // only committed when the component under the reticle actually changes —
-  // a raycast every frame to re-render the same name is wasted work.
-  useEffect(() => {
-    if (!walking) return;
-    // Re-entering walk starts from nothing known, so the same component under
-    // the reticle still counts as a change and the label comes back.
-    hoverIdRef.current = null;
-    let raf = 0;
-    let last = 0;
-    const loop = (time: number) => {
-      raf = requestAnimationFrame(loop);
-      if (time - last < 60) return;
-      last = time;
-      const rect = viewerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const element = sceneRef.current?.pick(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-        { ...pickContext(), tolerancePx: 18 },
-      );
-      if ((element?.id ?? null) === hoverIdRef.current) return;
-      hoverIdRef.current = element?.id ?? null;
-      setHover(element
-        ? {
-            id: element.id,
-            name: element.name,
-            system: element.system,
-            x: rect.width / 2,
-            y: rect.height / 2,
-            fromCentre: true,
-          }
-        : undefined);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [walking, pickContext]);
   const activeRole = session.mission?.role ?? roleId;
   const roleLabel = ROLES.find((role) => role.id === activeRole)?.label || activeRole || undefined;
   const locationLabel = session.room
@@ -784,19 +701,11 @@ export function TrainingDemo() {
           aria-label="Interactive building training viewer"
           className="workspace-viewer viewer-surface relative min-h-0 touch-none overflow-hidden bg-viewer-surface"
           data-walking={walking || undefined}
-          data-looking={looking || undefined}
           onPointerDownCapture={onPointerDown}
           onPointerMoveCapture={onPointerMove}
           onPointerUpCapture={onPointerUp}
           onPointerCancelCapture={onPointerCancel}
           onPointerLeave={() => {
-            // While walking the label belongs to the camera, not the pointer,
-            // so leaving for the sidebar must not clear it. Clearing it
-            // without also resetting the id the loop compares against is what
-            // desynced them: the loop saw "same component, nothing to do" and
-            // the label never came back, leaving the crosshair looking at
-            // nothing while a click still selected what it was on.
-            if (walking) return;
             hoverIdRef.current = null;
             setHover(undefined);
           }}
@@ -814,29 +723,8 @@ export function TrainingDemo() {
           />
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 
-          {walking ? (
-            // The reticle answers the question the label also answers, half a
-            // beat sooner: it opens up the moment it is over something you can
-            // select. An indicator that never reacts is one you have to be
-            // told about; this one says it itself. Monochrome, because it is
-            // chrome and state, not an accent.
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center" aria-hidden="true">
-              <div
-                className={cn(
-                  "size-4 rounded-full border transition-[transform,border-color] duration-[120ms] [transition-timing-function:var(--ease-out)] motion-reduce:transition-none",
-                  aimed ? "scale-[1.35] border-foreground" : "border-foreground/65",
-                )}
-              />
-              <div
-                className={cn(
-                  "absolute rounded-full bg-foreground transition-[width,height,opacity] duration-[120ms] [transition-timing-function:var(--ease-out)] motion-reduce:transition-none",
-                  aimed ? "size-1.5 opacity-100" : "size-1 opacity-90",
-                )}
-              />
-            </div>
-          ) : null}
 
-          {hover && hover.fromCentre === walking ? (
+          {hover ? (
             <div
               className="pointer-events-none absolute z-30 max-w-56 translate-x-3 translate-y-3 rounded-md border border-border bg-background/95 px-2.5 py-2"
               style={{ left: hover.x, top: hover.y }}
@@ -870,22 +758,18 @@ export function TrainingDemo() {
                 <span className="text-muted-foreground"> · L{session.level} · {locationLabel}</span>
               </span>
 
-              {session.status === "running" && looking ? (
+              {session.status === "running" && !hasWalked ? (
                 <span className="flex items-center gap-3 text-muted-foreground">
-                  {!hasWalked ? (
-                    <span className="flex items-center gap-1.5">
-                      <KbdGroup>
-                        <Kbd>W</Kbd>
-                        <Kbd>A</Kbd>
-                        <Kbd>S</Kbd>
-                        <Kbd>D</Kbd>
-                      </KbdGroup>
-                      walk
-                    </span>
-                  ) : null}
                   <span className="flex items-center gap-1.5">
-                    <Kbd>Esc</Kbd> release
+                    <KbdGroup>
+                      <Kbd>W</Kbd>
+                      <Kbd>A</Kbd>
+                      <Kbd>S</Kbd>
+                      <Kbd>D</Kbd>
+                    </KbdGroup>
+                    walk
                   </span>
+                  <span>Drag to look</span>
                 </span>
               ) : null}
 
@@ -893,8 +777,6 @@ export function TrainingDemo() {
                 <span className="workspace-viewer-objective flex items-center gap-1 text-muted-foreground">
                   {session.step?.mode === "reach" ? (
                     <>Reach {destinationLabel ?? "the target room"}</>
-                  ) : !looking ? (
-                    <><MousePointer2 className="size-3" aria-hidden="true" /> Click the model to look around</>
                   ) : session.selection && !session.selection.verdict ? (
                     <><MousePointer2 className="size-3" aria-hidden="true" /> Click it again to clear</>
                   ) : (

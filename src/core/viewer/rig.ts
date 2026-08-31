@@ -49,7 +49,6 @@ export class CameraRig {
   private pointers = new Map<number, { x: number; y: number; button: number }>()
   /** Programmatic moves must not fight an in-flight user gesture; they win. */
   private disposed = false
-  private lockListeners = new Set<(locked: boolean) => void>()
 
   constructor(
     private camera: THREE.PerspectiveCamera,
@@ -75,17 +74,6 @@ export class CameraRig {
     on("keydown", (e) => this.onKey(e as KeyboardEvent, true), window)
     on("keyup", (e) => this.onKey(e as KeyboardEvent, false), window)
     on("blur", () => this.keys.clear(), window)
-    // Pointer lock is the whole point of walk mode: with no pointer position
-    // there is no drag to tell apart from a click, so looking and selecting
-    // stop competing for the same gesture.
-    document.addEventListener("pointerlockchange", this.onLockChange)
-    document.addEventListener("pointerlockerror", this.onLockChange)
-    document.addEventListener("mousemove", this.onLockedLook)
-    this.detach.push(() => {
-      document.removeEventListener("pointerlockchange", this.onLockChange)
-      document.removeEventListener("pointerlockerror", this.onLockChange)
-      document.removeEventListener("mousemove", this.onLockedLook)
-    })
   }
 
   dispose(): void {
@@ -143,7 +131,6 @@ export class CameraRig {
 
   exitWalk(): void {
     if (this.mode === "orbit") return
-    this.releaseLook()
     this.mode = "orbit"
     cancelAnimationFrame(this.walkFrame)
     this.keys.clear()
@@ -184,56 +171,6 @@ export class CameraRig {
     for (const fn of this.changeListeners) fn()
   }
 
-  // --- pointer lock ---------------------------------------------------------
-
-  /** Whether the pointer is currently locked to the viewer. */
-  get locked(): boolean {
-    return document.pointerLockElement === this.dom
-  }
-
-  /**
-   * Asks for the lock. Must be called from a user gesture.
-   *
-   * Refusal is normal, not exceptional: it is denied in an iframe without
-   * `allow-pointer-lock`, and — per spec — always denied immediately after the
-   * user exits with Escape. Callers must stay usable without it, so this only
-   * ever asks; `pointerlockerror` and `pointerlockchange` report what happened.
-   */
-  requestLook(): void {
-    if (this.mode !== "walk" || this.locked) return
-    // The promise form is a proposed addition and is not everywhere, so the
-    // events above are the real channel and this catch is only for hosts that
-    // do return one.
-    void Promise.resolve(this.dom.requestPointerLock()).catch(() => undefined)
-  }
-
-  releaseLook(): void {
-    if (this.locked) document.exitPointerLock()
-  }
-
-  /** Subscribe to lock/unlock, so the UI can say which state it is in. */
-  onLock(fn: (locked: boolean) => void): () => void {
-    this.lockListeners.add(fn)
-    return () => this.lockListeners.delete(fn)
-  }
-
-  private onLockChange = (): void => {
-    if (!this.locked) this.keys.clear()
-    for (const fn of this.lockListeners) fn(this.locked)
-  }
-
-  /**
-   * Looking while locked. `movementX/Y` is raw device delta, so there is no
-   * pointer to run out of screen and no button to hold.
-   */
-  private onLockedLook = (e: MouseEvent): void => {
-    if (!this.locked || this.mode !== "walk") return
-    this.yaw += e.movementX * 0.0022
-    this.pitch -= e.movementY * 0.0022
-    this.applyWalk()
-    this.emit()
-  }
-
   private onPointerDown(e: PointerEvent): void {
     try {
       this.dom.setPointerCapture?.(e.pointerId)
@@ -252,9 +189,6 @@ export class CameraRig {
     p.x = e.clientX
     p.y = e.clientY
     if (this.mode === "walk") {
-      // Fallback for when the lock was refused; while locked, movementX/Y in
-      // `onLockedLook` is doing this instead and a drag means nothing.
-      if (this.locked) return
       this.yaw += dx * 0.0042
       this.pitch -= dy * 0.0042
       this.applyWalk()
