@@ -617,6 +617,9 @@ export function TrainingDemo() {
   // a raycast every frame to re-render the same name is wasted work.
   useEffect(() => {
     if (!walking) return;
+    // Re-entering walk starts from nothing known, so the same component under
+    // the reticle still counts as a change and the label comes back.
+    hoverIdRef.current = null;
     let raf = 0;
     let last = 0;
     const loop = (time: number) => {
@@ -750,7 +753,17 @@ export function TrainingDemo() {
           onPointerMoveCapture={onPointerMove}
           onPointerUpCapture={onPointerUp}
           onPointerCancelCapture={onPointerCancel}
-          onPointerLeave={() => setHover(undefined)}
+          onPointerLeave={() => {
+            // While walking the label belongs to the camera, not the pointer,
+            // so leaving for the sidebar must not clear it. Clearing it
+            // without also resetting the id the loop compares against is what
+            // desynced them: the loop saw "same component, nothing to do" and
+            // the label never came back, leaving the crosshair looking at
+            // nothing while a click still selected what it was on.
+            if (walking) return;
+            hoverIdRef.current = null;
+            setHover(undefined);
+          }}
           onClickCapture={onViewerClickCapture}
         >
           <div ref={containerRef} className="absolute inset-0" />
