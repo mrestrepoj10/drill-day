@@ -239,10 +239,18 @@ export class Stage {
 
   // --- picking ------------------------------------------------------------
 
-  /** Screen point → stage id. */
+  /**
+   * Screen point → stage id.
+   *
+   * Looks *past* decoration rather than being stopped by it. The ray already
+   * arrives as a distance-sorted list, so the first selectable thing along it
+   * is the answer; taking hit[0] and dropping it when it happened to be trim
+   * meant a bracket or an ID collar in front of a valve silently cost the
+   * exact hit, leaving only a centre-distance tolerance that works from some
+   * angles and not others.
+   */
   pick(clientX: number, clientY: number): StageItem | undefined {
-    const hit = this.rawHit(clientX, clientY)
-    return hit?.item && !hit.item.decorative ? hit.item : undefined
+    return this.rawHit(clientX, clientY, true)?.item
   }
 
   /**
@@ -324,6 +332,8 @@ export class Stage {
   private rawHit(
     clientX: number,
     clientY: number,
+    /** Skip guides and trim, and keep going to whatever is behind them. */
+    selectableOnly = false,
   ): { item?: StageItem; distance: number } | undefined {
     const rect = this.handle.canvas.getBoundingClientRect()
     const ndc = new THREE.Vector2(
@@ -344,6 +354,7 @@ export class Stage {
       // matching the old `hitTest(..., ignoreTransparent)` behaviour.
       if ((item.opacity ?? 1) < 1) continue
       if (planes.some((p) => p.distanceToPoint(hit.point) < 0)) continue
+      if (selectableOnly && item.decorative) continue
       return { item, distance: hit.distance }
     }
     return undefined
