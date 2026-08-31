@@ -296,12 +296,17 @@ a {
   color: inherit;
 }
 
-/* Looking around is a drag gesture, so the pointer sits next to the crosshair
-   the whole time and it is not obvious which one is aiming. While the drag is
-   live the crosshair is the only mark on screen; the pointer comes back the
-   moment it ends, because clicking a component still aims with it. */
-.workspace-viewer[data-walking]:active {
+/* In first person the crosshair is the aim point — clicks and the component
+   label both read it — so the pointer is not a second one. Hiding it is what
+   makes the reticle true rather than decorative. */
+.workspace-viewer[data-walking] {
   cursor: none;
+}
+
+/* Except over the labels, which are real buttons. An invisible pointer over a
+   click target is a worse trade than a pointer that reappears on one. */
+.workspace-viewer[data-walking] [data-viewer-marker] {
+  cursor: pointer;
 }
 
 /* Objective + floor plan, pinned to the model.

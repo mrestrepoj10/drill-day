@@ -180,7 +180,7 @@ const DRILLS: Drill[] = [
 ];
 
 type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
-type HoverLabel = { id: string; name: string; system: string; x: number; y: number };
+type HoverLabel = { id: string; name: string; system: string; x: number; y: number; fromCentre: boolean };
 
 
 export function TrainingDemo() {
@@ -188,6 +188,7 @@ export function TrainingDemo() {
   const viewerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<TrainingScene | null>(null);
   const hoverFrame = useRef<number | null>(null);
+  const hoverIdRef = useRef<string | null>(null);
   const [training, setTraining] = useState<ViewerTraining | null>(null);
   const [roleId, setRoleId] = useState("");
   const [sectionOn, setSectionOn] = useState(false);
@@ -232,6 +233,7 @@ export function TrainingDemo() {
   );
   const snapshot = useCallback(() => training?.snapshot() ?? IDLE, [training]);
   const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const walking = session.status === "running" && !!session.position;
 
   // Machine-readable session breadcrumb for automated QA (agents driving the
   // page can read position/room without scraping pixels). Invisible to users.
@@ -470,7 +472,7 @@ export function TrainingDemo() {
         Math.hypot(event.clientX - start.x, event.clientY - start.y),
       );
     }
-    if (event.buttons !== 0 || hoverFrame.current !== null) return;
+    if (walking || event.buttons !== 0 || hoverFrame.current !== null) return;
     const { clientX, clientY } = event;
     hoverFrame.current = requestAnimationFrame(() => {
       hoverFrame.current = null;
@@ -486,10 +488,17 @@ export function TrainingDemo() {
             system: element.system,
             x: clientX - rect.left,
             y: clientY - rect.top,
+            fromCentre: false,
           }
         : undefined);
     });
   };
+
+  /** Client coords of the crosshair — the aim point while walking. */
+  const crosshair = useCallback((): [number, number] | null => {
+    const rect = viewerRef.current?.getBoundingClientRect();
+    return rect ? [rect.left + rect.width / 2, rect.top + rect.height / 2] : null;
+  }, []);
 
   const onPointerUp = (event: React.PointerEvent) => {
     const start = press.current;
@@ -497,7 +506,12 @@ export function TrainingDemo() {
     if (!start || start.pointerId !== event.pointerId) return;
     if (start.maxDistance > (event.pointerType === "touch" ? 14 : 9)) return;
     if (performance.now() - start.t > 700) return;
-    answerAt(event.clientX, event.clientY);
+    // In first person the crosshair is what is aiming, so that is what answers.
+    // Picking by pointer while a reticle sits in the middle of the screen gives
+    // two aim points and only one of them works.
+    const centre = walking ? crosshair() : null;
+    if (centre) answerAt(centre[0], centre[1]);
+    else answerAt(event.clientX, event.clientY);
   };
 
   const onPointerCancel = () => {
@@ -592,7 +606,42 @@ export function TrainingDemo() {
     ? `${session.stepIndex + 1} of ${hudStages.length} · ${hudStages[session.stepIndex]?.label ?? ""}`
     : "";
 
-  const walking = session.status === "running" && !!session.position;
+
+  // While walking, "what am I looking at" is whatever the crosshair is over, so
+  // the label has to follow the camera rather than the pointer. Throttled and
+  // only committed when the component under the reticle actually changes —
+  // a raycast every frame to re-render the same name is wasted work.
+  useEffect(() => {
+    if (!walking) return;
+    let raf = 0;
+    let last = 0;
+    const loop = (time: number) => {
+      raf = requestAnimationFrame(loop);
+      if (time - last < 60) return;
+      last = time;
+      const rect = viewerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const element = sceneRef.current?.pick(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+        { ...pickContext(), tolerancePx: 18 },
+      );
+      if ((element?.id ?? null) === hoverIdRef.current) return;
+      hoverIdRef.current = element?.id ?? null;
+      setHover(element
+        ? {
+            id: element.id,
+            name: element.name,
+            system: element.system,
+            x: rect.width / 2,
+            y: rect.height / 2,
+            fromCentre: true,
+          }
+        : undefined);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [walking, pickContext]);
   const activeRole = session.mission?.role ?? roleId;
   const roleLabel = ROLES.find((role) => role.id === activeRole)?.label || activeRole || undefined;
   const locationLabel = session.room
@@ -719,7 +768,7 @@ export function TrainingDemo() {
             </div>
           ) : null}
 
-          {hover ? (
+          {hover && hover.fromCentre === walking ? (
             <div
               className="pointer-events-none absolute z-30 max-w-56 translate-x-3 translate-y-3 rounded-md border border-border bg-background/95 px-2.5 py-2"
               style={{ left: hover.x, top: hover.y }}
