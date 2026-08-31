@@ -23,7 +23,14 @@ export const AUDIT_PROMPT =
   "matters, bring the camera with you, and pin a note on it in plain English — what it does, and what " +
   "goes off if I shut it. No bare tag codes, and tell me which floor I am on.";
 
-export function SuggestedPrompt({ prompt = SUGGESTED_PROMPT }: { prompt?: string }) {
+export function SuggestedPrompt({
+  prompt = SUGGESTED_PROMPT,
+  prominent = false,
+}: {
+  prompt?: string;
+  /** On the launch screen this is the first move, so it is sized like one. */
+  prominent?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
 
   const copyPrompt = async () => {
@@ -34,13 +41,21 @@ export function SuggestedPrompt({ prompt = SUGGESTED_PROMPT }: { prompt?: string
 
   return (
     <>
-      <p className="text-pretty text-[13px] leading-[1.5] text-foreground">{prompt}</p>
+      <p
+        className={
+          prominent
+            ? "text-pretty text-[14px] leading-[1.55] text-foreground"
+            : "text-pretty text-[13px] leading-[1.5] text-foreground"
+        }
+      >
+        {prompt}
+      </p>
       <Button
         type="button"
-        variant="ghost"
-        size="xs"
+        variant={prominent ? "default" : "ghost"}
+        size={prominent ? "default" : "xs"}
         onClick={copyPrompt}
-        className="mt-2 -ml-2 text-interactive hover:text-foreground"
+        className={prominent ? "mt-3 w-full text-[13px] font-semibold" : "mt-2 -ml-2 text-interactive hover:text-foreground"}
       >
         {copied ? <ClipboardCheck className="size-3" /> : <Clipboard className="size-3" />}
         {copied ? "Copied" : "Copy prompt"}

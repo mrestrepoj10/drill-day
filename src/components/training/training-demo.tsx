@@ -692,6 +692,7 @@ export function TrainingDemo() {
           ref={viewerRef}
           aria-label="Interactive building training viewer"
           className="workspace-viewer viewer-surface relative min-h-0 touch-none overflow-hidden bg-viewer-surface"
+          data-walking={walking || undefined}
           onPointerDownCapture={onPointerDown}
           onPointerMoveCapture={onPointerMove}
           onPointerUpCapture={onPointerUp}

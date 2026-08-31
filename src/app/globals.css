@@ -296,6 +296,14 @@ a {
   color: inherit;
 }
 
+/* Looking around is a drag gesture, so the pointer sits next to the crosshair
+   the whole time and it is not obvious which one is aiming. While the drag is
+   live the crosshair is the only mark on screen; the pointer comes back the
+   moment it ends, because clicking a component still aims with it. */
+.workspace-viewer[data-walking]:active {
+  cursor: none;
+}
+
 /* Objective + floor plan, pinned to the model.
    Only below 1500px, where the mission panel is a drawer and would otherwise
    take both away with it. Bottom-left, so the centre of the canvas stays the
@@ -319,6 +327,11 @@ a {
 /* The drawer that owns this content is open; it is saying all of it already. */
 .workspace-hud[data-hidden] {
   display: none;
+}
+
+/* Collapsed it is one icon, and should take exactly that much room. */
+.workspace-hud[data-collapsed] {
+  width: auto;
 }
 
 @keyframes hud-in {

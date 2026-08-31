@@ -9,7 +9,6 @@ import {
 } from "@layer0/viewer-training";
 import { FloorPlan } from "@/components/training/plan";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 /**
  * The objective and the floor plan, on the model itself.
@@ -37,14 +36,35 @@ export function ViewerHud({
   const step = session.step;
   if (session.status !== "running" || !step) return null;
 
-  return (
-    <div className="workspace-hud" data-hidden={hidden || undefined}>
-      <div className="overflow-hidden rounded-xl border border-border bg-background/92 backdrop-blur-md">
+  // Collapsed it is a single icon: the model is what the viewer is for, and
+  // someone who has read the objective should be able to get the canvas back
+  // without the panel leaving a footprint behind.
+  if (!open) {
+    return (
+      <div className="workspace-hud" data-collapsed="" data-hidden={hidden || undefined}>
         <Button
           type="button"
           variant="ghost"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
+          size="icon"
+          onClick={() => setOpen(true)}
+          aria-expanded={false}
+          aria-label="Show the objective and floor plan"
+          className="size-9 rounded-xl border border-border/70 bg-background/55 backdrop-blur-md hover:bg-background/75"
+        >
+          <Map className="size-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace-hud" data-hidden={hidden || undefined}>
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-background/55 backdrop-blur-xl">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          aria-expanded
           // Square, because the card it sits in owns the radius and clips it.
           className="h-auto w-full items-start justify-start gap-2 rounded-none px-3 py-2.5 text-left font-normal"
         >
@@ -57,35 +77,23 @@ export function ViewerHud({
               {step.prompt}
             </span>
           </span>
-          <ChevronDown
-            className={cn(
-              "mt-0.5 size-3.5 shrink-0 text-text-tertiary transition-transform duration-150 [transition-timing-function:var(--ease-out)]",
-              open && "rotate-180",
-            )}
-            aria-hidden="true"
-            strokeWidth={1.5}
-          />
+          <ChevronDown className="mt-0.5 size-3.5 shrink-0 rotate-180 text-text-tertiary" aria-hidden="true" strokeWidth={1.5} />
         </Button>
 
-        {/* Mount and unmount rather than animate: this gets toggled to reclaim
-            the canvas, and a panel someone opens and closes repeatedly should
-            not make them wait for it. */}
-        {open ? (
-          <div className="border-t border-border/70 p-2">
-            <div className="overflow-hidden rounded-lg border border-border/80 bg-viewer-surface p-1.5">
-              <FloorPlan
-                level={session.level}
-                position={session.position}
-                room={session.room}
-                highlighted={session.revealed.flatMap((hint) => hint.reveals ?? [])}
-                cueElements={session.learningCuesOn ? learningCueElements(step) : []}
-                cueRooms={session.learningCuesOn ? learningCueRooms(step) : []}
-                annotations={session.annotations}
-                trail={session.trail}
-              />
-            </div>
+        <div className="border-t border-border/60 p-2">
+          <div className="overflow-hidden rounded-lg border border-border/60 bg-viewer-surface/70 p-1.5">
+            <FloorPlan
+              level={session.level}
+              position={session.position}
+              room={session.room}
+              highlighted={session.revealed.flatMap((hint) => hint.reveals ?? [])}
+              cueElements={session.learningCuesOn ? learningCueElements(step) : []}
+              cueRooms={session.learningCuesOn ? learningCueRooms(step) : []}
+              annotations={session.annotations}
+              trail={session.trail}
+            />
           </div>
-        ) : null}
+        </div>
       </div>
     </div>
   );
