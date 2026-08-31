@@ -296,6 +296,42 @@ a {
   color: inherit;
 }
 
+/* Objective + floor plan, pinned to the model.
+   Only below 1500px, where the mission panel is a drawer and would otherwise
+   take both away with it. Bottom-left, so the centre of the canvas stays the
+   model's. */
+.workspace-hud {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 20;
+  width: min(300px, calc(100% - 1.5rem));
+  display: none;
+  animation: hud-in 180ms var(--ease-out) both;
+}
+
+@media (max-width: 1499.98px) {
+  .workspace-hud {
+    display: block;
+  }
+}
+
+/* The drawer that owns this content is open; it is saying all of it already. */
+.workspace-hud[data-hidden] {
+  display: none;
+}
+
+@keyframes hud-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-hud {
+    animation: none;
+  }
+}
+
 /* The viewer is the one always-on surface. The mission panel joins it in-flow
    only on wide screens; the agent console is an overlay drawer at every width. */
 .workspace-grid {

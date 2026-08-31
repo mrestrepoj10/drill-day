@@ -19,8 +19,9 @@ export const SUGGESTED_PROMPT =
  * worth many calls.
  */
 export const AUDIT_PROMPT =
-  "Walk the chilled-water system in this building and brief me the way you would at a shift handover. " +
-  "Pin a note on anything I should know before I touch a valve.";
+  "Take me round the chilled-water system as if it is my first shift here. Stop at each thing that " +
+  "matters, bring the camera with you, and pin a note on it in plain English — what it does, and what " +
+  "goes off if I shut it. No bare tag codes, and tell me which floor I am on.";
 
 export function SuggestedPrompt({ prompt = SUGGESTED_PROMPT }: { prompt?: string }) {
   const [copied, setCopied] = useState(false);

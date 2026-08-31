@@ -237,7 +237,7 @@ export const MISSIONS: Record<string, Mission> = {
         validDestination: { room: "CORE-L1" },
         hints: [
           { text: "The riser runs up the stair core at the south-east corner." },
-          { text: "The ramp out of the core takes you to the first floor landing.", reveals: ["FIRE-RSR-01"] },
+          { text: "Take the stair in the core up one flight to the first floor landing.", reveals: ["FIRE-RSR-01"] },
         ],
         successMessage: "First floor landing valve, on the same riser you just charged.",
       },
@@ -384,7 +384,7 @@ export const MISSIONS: Record<string, Mission> = {
         startState: { walkTo: [2, 0, 16], facing: [20, 0, 16] },
         validDestination: { room: "ROOM-217" },
         hints: [
-          { text: "First floor, south side. The ramp is in the stair core at the far end." },
+          { text: "First floor, south side. The stair is in the core at the far end." },
         ],
         successMessage: "Server room 217.",
       },

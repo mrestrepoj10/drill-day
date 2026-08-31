@@ -42,6 +42,7 @@ export function placeDecorativeAsset(stage: Stage, asset: DecorativeAsset): read
 export function defineFacilityAssetGeometry(stage: Stage): void {
   stage.defineGeometry("asset:ring-xz", ringLines("xz", true))
   stage.defineGeometry("asset:ring-yz", ringLines("yz"))
+  stage.defineGeometry("asset:hoop", ringLines("xz"))
   stage.defineGeometry("asset:grille", grilleLines())
   stage.defineGeometry("asset:cabinet-front", cabinetFrontLines())
   stage.defineGeometry("asset:blockwork", blockworkLines())
@@ -467,14 +468,19 @@ export function vesselParts({
 
 /**
  * BS EN 3 extinguisher identity: the body is safety red; the agent is named by
- * a colour band across the shoulder (CO2 black, foam cream, powder blue,
- * water plain red), and CO2 carries its swan-neck horn. A wall bracket plate
- * ties it to the wall the way BS 5306-8 hangs it.
+ * a colour band around the shoulder (CO2 black, foam cream, powder blue,
+ * water plain red), and CO2 swaps the mesh's hose nozzle for its horn.
+ *
+ * The bottle, valve head, gauge and hose are in the shared mesh; what lives
+ * here is only what differs per instance — the agent, and how far the wall is,
+ * because the catalogue hangs these a comfortable arm off the partition and a
+ * bracket that stops at the bottle would leave them floating.
  */
 export function extinguisherTrimParts(
   size: Vec3,
   type: string | undefined,
   wall: 1 | -1,
+  standoff?: number,
 ): readonly AssetPart[] {
   const band: Record<string, number> = {
     co2: 0x101010,
@@ -484,46 +490,345 @@ export function extinguisherTrimParts(
   }
   const bandColor = band[(type ?? "").toLowerCase()]
   const [sx, sy, sz] = size
+  const back = standoff ?? sz * 0.62
   const parts: AssetPart[] = [
-    // Bracket plate against the wall behind the cylinder.
+    // Backplate on the wall face, with the bracket arm out to the bottle.
     {
-      key: "bracket",
+      key: "bracket-plate",
       geometry: "box",
-      offset: [0, sy * 0.18, wall * (sz * 0.62)],
-      size: [0.1, 0.34, 0.03],
+      offset: [0, sy * 0.16, wall * back],
+      size: [0.16, 0.36, 0.02],
       color: 0x53595e,
       metal: true,
     },
-    // Black handle/valve assembly on top.
     {
-      key: "valve",
+      key: "bracket-arm",
       geometry: "box",
-      offset: [0.05, sy * 0.62, 0],
-      size: [0.2, 0.07, 0.05],
-      color: 0x17191b,
+      offset: [0, sy * 0.16, (wall * (back + sz * 0.42)) / 2],
+      size: [0.07, 0.05, back - sz * 0.42],
+      color: 0x53595e,
+      metal: true,
+    },
+    // The hoop the bottle actually sits in.
+    {
+      key: "bracket-hoop",
+      geometry: "asset:hoop",
+      offset: [0, sy * 0.16, 0],
+      size: [sx * 0.9, 1, sz * 0.9],
+      color: 0x3f4448,
+      lines: true,
     },
   ]
   if (bandColor !== undefined) {
     parts.push({
       key: "agent-band",
       geometry: "cylinder",
-      offset: [0, sy * 0.3, 0],
-      size: [sx * 0.66, sy * 0.22, sz * 0.66],
+      offset: [0, sy * 0.12, 0],
+      size: [sx * 0.64, sy * 0.15, sz * 0.64],
       color: bandColor,
       unlit: true,
     })
   }
   if ((type ?? "").toLowerCase() === "co2") {
-    parts.push({
-      key: "horn",
+    // Swan neck and horn, hung on the end of the mesh's hose.
+    parts.push(
+      {
+        key: "horn-neck",
+        geometry: "cylinder",
+        offset: [-sx * 0.38, -sy * 0.15, 0],
+        size: [0.045, 0.16, 0.045],
+        direction: [-0.7, -0.7, 0],
+        color: 0x0d0f10,
+      },
+      {
+        key: "horn-bell",
+        geometry: "cylinder",
+        offset: [-sx * 0.55, -sy * 0.25, 0],
+        size: [0.13, 0.13, 0.13],
+        direction: [-0.7, -0.7, 0],
+        color: 0x141719,
+      },
+    )
+  }
+  return parts
+}
+
+/**
+ * A fire alarm panel: hinged door with its zone-chart window, the indicator
+ * column that tells you whether the system is in fault or in alarm, and the
+ * mounting board that ties it back to the wall it hangs off.
+ *
+ * `depth` is how far the panel's centre sits from the wall face, which is what
+ * decides whether this reads as wall-mounted or as a red box in mid-air.
+ */
+export function firePanelParts(size: Vec3, depth: number): readonly AssetPart[] {
+  const [w, h, d] = size
+  const face = d / 2
+  const parts: AssetPart[] = [
+    {
+      key: "backboard",
+      geometry: "box",
+      offset: [0, 0, -depth + 0.015],
+      size: [w + 0.16, h + 0.16, 0.03],
+      color: 0x5b6165,
+    },
+    {
+      key: "spacer",
+      geometry: "box",
+      offset: [0, 0, -(depth + face) / 2],
+      size: [w * 0.6, h * 0.6, depth - face],
+      color: 0x8b1220,
+    },
+    // Door leaf, seam and hinge line: a panel you could open.
+    {
+      key: "door-seam",
+      geometry: "boxEdges",
+      offset: [0, 0, face * 0.4],
+      size: [w * 0.9, h * 0.86, d * 0.9],
+      color: 0x2b2020,
+      lines: true,
+    },
+    {
+      key: "hinge",
       geometry: "cylinder",
-      offset: [-sx * 0.5, sy * 0.34, 0],
-      size: [0.1, sy * 0.42, 0.16],
-      direction: [-0.35, 1, 0],
-      color: 0x0d0f10,
+      offset: [-w * 0.45, 0, face + 0.01],
+      size: [0.03, h * 0.86, 0.03],
+      color: 0x3c4145,
+      metal: true,
+    },
+    {
+      key: "latch",
+      geometry: "cylinder",
+      offset: [w * 0.38, -h * 0.06, face + 0.02],
+      size: [0.045, 0.03, 0.045],
+      direction: [0, 0, 1],
+      color: 0xb8bec2,
+      metal: true,
+    },
+    // Zone chart behind glass — the legend a responder reads first.
+    {
+      key: "legend",
+      geometry: "box",
+      offset: [-w * 0.06, h * 0.22, face + 0.008],
+      size: [w * 0.6, h * 0.3, 0.012],
+      color: 0xe8ecee,
+      unlit: true,
+    },
+    {
+      key: "legend-rules",
+      geometry: "asset:grille",
+      offset: [-w * 0.06, h * 0.22, face + 0.016],
+      size: [w * 0.52, h * 0.24, 1],
+      color: 0x8d949a,
+      lines: true,
+    },
+    {
+      key: "display",
+      geometry: "box",
+      offset: [-w * 0.06, -h * 0.1, face + 0.008],
+      size: [w * 0.6, h * 0.14, 0.012],
+      color: 0x18342c,
+      unlit: true,
+    },
+  ]
+  // Indicator column: fire, fault, power.
+  for (const [key, dy, color] of [
+    ["fire", 0.24, 0xff3b30],
+    ["fault", 0.16, 0xf0b429],
+    ["power", 0.08, 0x35a06a],
+  ] as const) {
+    parts.push({
+      key: `led-${key}`,
+      geometry: "box",
+      offset: [w * 0.32, -h * dy, face + 0.01],
+      size: [0.035, 0.022, 0.014],
+      color,
+      unlit: true,
     })
   }
   return parts
+}
+
+/**
+ * A dry riser inlet breeching: the cabinet on the external wall, its door
+ * standing open, and the twin 65 mm instantaneous couplings a pumping
+ * appliance connects to.
+ *
+ * The door is drawn open for the same reason every door leaf in this building
+ * is: the semantic cabinet is a solid body, so anything drawn inside it would
+ * be invisible, and the couplings are the entire point of the object.
+ * Authored facing +x; `rotationY` turns it onto another elevation.
+ */
+export function dryRiserInletParts(size: Vec3): readonly AssetPart[] {
+  const [d, h, w] = size
+  const face = d / 2
+  const parts: AssetPart[] = [
+    // Masonry surround, so the cabinet is set into the wall, not stuck on it.
+    {
+      key: "surround",
+      geometry: "box",
+      offset: [-face - 0.05, 0.06, 0],
+      size: [0.1, h + 0.34, w + 0.34],
+      color: 0x7e837f,
+    },
+    // Back plate of the recess, in front of the semantic body.
+    {
+      key: "backplate",
+      geometry: "box",
+      offset: [face + 0.012, -h * 0.04, 0],
+      size: [0.024, h * 0.82, w * 0.88],
+      color: 0x2b3134,
+    },
+    {
+      key: "door-frame",
+      geometry: "boxEdges",
+      offset: [face * 0.6, 0, 0],
+      size: [d * 0.2, h + 0.02, w + 0.02],
+      color: 0x5c1119,
+      lines: true,
+    },
+    // The leaf, swung back against the elevation.
+    {
+      key: "door-leaf",
+      geometry: "box",
+      offset: [face + 0.12, 0, -(w / 2 + 0.03)],
+      size: [0.24, h * 0.92, 0.03],
+      color: 0xc8102e,
+    },
+    {
+      key: "door-hinge",
+      geometry: "cylinder",
+      offset: [face + 0.015, 0, -(w / 2 + 0.02)],
+      size: [0.03, h * 0.94, 0.03],
+      color: 0x8d9499,
+      metal: true,
+    },
+    {
+      key: "hasp",
+      geometry: "box",
+      offset: [face + 0.03, -h * 0.02, w * 0.44],
+      size: [0.06, 0.07, 0.04],
+      color: 0xb0b6ba,
+      metal: true,
+    },
+    // Identification plate over the opening: what the brigade looks for.
+    {
+      key: "id-plate",
+      geometry: "box",
+      offset: [face + 0.02, h * 0.56, 0],
+      size: [0.03, 0.16, w * 0.94],
+      color: 0xc8102e,
+      unlit: true,
+    },
+  ]
+  // Twin instantaneous couplings on the back plate, blank caps on.
+  for (const [key, dz] of [["north", -1], ["south", 1]] as const) {
+    parts.push(
+      {
+        key: `coupling-${key}`,
+        geometry: "cylinder",
+        offset: [face + 0.07, -h * 0.06, dz * w * 0.24],
+        size: [0.15, 0.11, 0.15],
+        direction: [1, 0, 0],
+        color: 0xa8763c,
+        metal: true,
+      },
+      {
+        key: `cap-${key}`,
+        geometry: "cylinder",
+        offset: [face + 0.14, -h * 0.06, dz * w * 0.24],
+        size: [0.17, 0.05, 0.17],
+        direction: [1, 0, 0],
+        color: 0x8d6430,
+        metal: true,
+      },
+      {
+        key: `chain-${key}`,
+        geometry: "cylinder",
+        offset: [face + 0.05, -h * 0.2, dz * w * 0.24],
+        size: [0.012, 0.24, 0.012],
+        color: 0x6f767a,
+        metal: true,
+      },
+    )
+  }
+  return parts
+}
+
+/**
+ * A dry riser landing valve: the branch off the riser, and the outlet the hose
+ * couples to. The handwheel and body are already the semantic valve mesh — all
+ * that is missing is the thing that makes it a *landing* valve rather than an
+ * isolation valve, which is the instantaneous outlet and its blank cap.
+ *
+ * `reach` is the distance back to the riser it tees off, signed along x.
+ */
+export function landingValveParts(size: Vec3, reach: number): readonly AssetPart[] {
+  const [w, h] = size
+  const out = Math.sign(reach) * -1 // the outlet faces away from the riser
+  return [
+    {
+      key: "branch",
+      geometry: "cylinder",
+      offset: [reach / 2, -h * 0.05, 0],
+      size: [0.11, Math.abs(reach), 0.11],
+      direction: [1, 0, 0],
+      color: 0xc8102e,
+      metal: true,
+    },
+    {
+      key: "outlet",
+      geometry: "cylinder",
+      offset: [out * w * 0.78, -h * 0.05, 0],
+      size: [0.13, 0.2, 0.13],
+      direction: [1, 0, 0],
+      color: 0xc8102e,
+      metal: true,
+    },
+    {
+      key: "coupling",
+      geometry: "cylinder",
+      offset: [out * w * 1.08, -h * 0.05, 0],
+      size: [0.16, 0.07, 0.16],
+      direction: [1, 0, 0],
+      color: 0xa8763c,
+      metal: true,
+    },
+    {
+      key: "cap",
+      geometry: "cylinder",
+      offset: [out * w * 1.24, -h * 0.05, 0],
+      size: [0.17, 0.05, 0.17],
+      direction: [1, 0, 0],
+      color: 0x8d6430,
+      metal: true,
+    },
+    {
+      key: "cap-chain",
+      geometry: "cylinder",
+      offset: [out * w * 1.0, -h * 0.3, 0],
+      size: [0.012, 0.3, 0.012],
+      color: 0x6f767a,
+      metal: true,
+    },
+    // Identification plate above the valve, on its own bracket.
+    {
+      key: "sign",
+      geometry: "box",
+      offset: [out * w * 0.3, h * 0.95, 0],
+      size: [0.34, 0.16, 0.015],
+      color: 0xc8102e,
+      unlit: true,
+    },
+    {
+      key: "sign-post",
+      geometry: "cylinder",
+      offset: [out * w * 0.3, h * 0.7, 0],
+      size: [0.02, 0.34, 0.02],
+      color: 0x6f767a,
+      metal: true,
+    },
+  ]
 }
 
 /** A manual call point: the red 87 mm box at 1.4 m beside every exit door. */

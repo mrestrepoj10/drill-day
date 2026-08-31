@@ -4,9 +4,12 @@ import {
   ahuTrimParts,
   callPointParts,
   defineFacilityAssetGeometry,
+  dryRiserInletParts,
   extinguisherTrimParts,
   fcuTrimParts,
+  firePanelParts,
   ladderTrayParts,
+  landingValveParts,
   placeDecorativeAsset,
   pumpTrimParts,
   roomPlaqueParts,
@@ -25,13 +28,13 @@ import {
   ELEMENTS,
   ELEMENT_BY_ID,
   OPEN_TILE,
-  RAMP,
   ROOMS,
   STOREY,
   SYSTEM_COLOR,
   doors,
   fitout,
   slabs,
+  stair,
   walls,
 } from "@/lib/training/facility"
 
@@ -51,6 +54,14 @@ const INSULATION = 0xbfc3c6
 /** Galvanised sheet metal for ductwork and containment. */
 const GALVANISED = 0xb9bdbf
 const SAFETY_RED = 0xc8102e
+/** External paving: warmer and lighter than the structural slab. */
+const PAVING = 0x8b8e88
+/**
+ * Face of the corridor's north partition. Every extinguisher and the alarm
+ * panel hang off this one wall, and the catalogue places them a comfortable
+ * arm in front of it — brackets and back boxes have to reach back to it.
+ */
+const CORRIDOR_WALL_FACE = 13.925
 const FURNITURE: Record<string, number> = {
   desk: 0xc0a67f,
   chair: 0x5a6674,
@@ -105,21 +116,14 @@ export class TrainingScene implements TrainingRenderer {
         geometry: "box",
         position: slab.position,
         size: slab.size,
-        color: SLAB,
+        // External aprons are paving, not structure — the tone change is what
+        // says "you have left the building" from inside the walk.
+        color: slab.id.startsWith("apron") ? PAVING : SLAB,
         decorative: true,
       })
     }
 
-    // The ramp is one tilted slab: `direction` aims the box's up-axis, so the
-    // walking surface climbs without needing a flight of treads.
-    stage.set("ramp", {
-      geometry: "box",
-      position: RAMP.position,
-      size: RAMP.size,
-      direction: RAMP.direction,
-      color: shade(SLAB, 0.12),
-      decorative: true,
-    })
+    this.buildStair()
 
     for (const piece of walls()) {
       // Opaque: a wall that a hover ray passes through reads as a rendering
@@ -142,6 +146,47 @@ export class TrainingScene implements TrainingRenderer {
     for (const element of ELEMENTS) this.paint(element)
     this.buildTrainingAssetDetails()
     this.built = true
+  }
+
+  /**
+   * The stair between the two floors.
+   *
+   * The id prefix is the contract with the walk rig, not a naming convention:
+   * the ground probe looks for `slab:`/`ramp`, the collision test for
+   * `wall:`/`slab:`. So every tread and landing keeps the `ramp` prefix the
+   * old sloped slab used — the walker climbs discrete tread tops perfectly
+   * well — the understair enclosure is a wall because it has to stop someone
+   * walking into a 1.7 m soffit, and the balustrade is neither, because a
+   * handrail you cannot walk past is a fence.
+   */
+  private buildStair(): void {
+    for (const piece of stair()) {
+      const id =
+        piece.role === "tread"
+          ? `ramp:${piece.key}`
+          : piece.role === "enclosure"
+            ? `wall:${piece.key}`
+            : `stair:${piece.key}`
+      this.stage.set(id, {
+        geometry: piece.shape ?? "box",
+        position: piece.position,
+        size: piece.size,
+        direction: piece.direction,
+        color:
+          piece.role === "tread"
+            ? shade(SLAB, 0.12)
+            : piece.role === "nosing"
+              ? HAZARD_YELLOW
+              : piece.role === "guard"
+                ? 0x9aa1a6
+                : piece.role === "enclosure"
+                  ? FABRIC
+                  : shade(SLAB, -0.06),
+        metal: piece.role === "guard",
+        unlit: piece.role === "nosing",
+        decorative: true,
+      })
+    }
   }
 
   /**
@@ -316,6 +361,9 @@ export class TrainingScene implements TrainingRenderer {
       // Plant spaces run exposed-soffit, like the real thing — services on
       // show is the point of the room.
       if (room.id === "PLANT-L0" || room.id === "AHU-L1") continue
+      // The stair core is open ground-to-first. A tile grid at 3.2 m would be
+      // laid straight through the flight climbing past it.
+      if (room.id === "CORE-L0") continue
 
       stage.defineGeometry(`grid:${room.id}`, tbarMesh(w, d))
       this.ceiling.push(`tbar:${room.id}`)
@@ -520,6 +568,219 @@ export class TrainingScene implements TrainingRenderer {
     }
 
     this.buildDockDetails()
+    this.buildSiteDetails()
+  }
+
+  /**
+   * The two things that live outside the footprint — the dry riser inlet on
+   * the east elevation and the assembly point across the west yard — used to
+   * float against nothing, which made both read as modelling mistakes rather
+   * than as the deliberate answer to "where do you go / where does the brigade
+   * connect". So the outside gets just enough built context to place them: a
+   * kerbed apron to stand on, a marked route between the final exit and the
+   * muster point, and a door you can recognise from the outside.
+   */
+  private buildSiteDetails(): void {
+    const stage = this.stage
+
+    // Kerbs around the aprons, so the paving ends at an edge rather than in
+    // mid-air.
+    const kerbs: [string, Vec3, Vec3][] = [
+      ["west-w", [-12.94, 0.06, 16], [0.12, 0.12, 20]],
+      ["west-n", [-7, 0.06, 6.06], [12, 0.12, 0.12]],
+      ["west-s", [-7, 0.06, 25.94], [12, 0.12, 0.12]],
+      ["east-e", [54.94, 0.06, 9], [0.12, 0.12, 18]],
+      ["east-n", [52, 0.06, 0.06], [6, 0.12, 0.12]],
+      ["east-s", [52, 0.06, 17.94], [6, 0.12, 0.12]],
+    ]
+    for (const [key, position, size] of kerbs) {
+      stage.set(`detail:site:kerb:${key}`, {
+        geometry: "box",
+        position,
+        size,
+        color: shade(PAVING, 0.14),
+        decorative: true,
+      })
+    }
+
+    // The escape route: a painted walkway from the final exit across the yard,
+    // edged in white and marked with direction dashes. This is the whole
+    // reason the assembly point is where it is, and it was invisible.
+    stage.set("detail:site:route", {
+      geometry: "box",
+      position: [-3.6, 0.014, 16],
+      size: [6.8, 0.014, 2.2],
+      color: 0x2f6b46,
+      unlit: true,
+      opacity: 0.65,
+      decorative: true,
+    })
+    for (const [key, z] of [["north", 14.95], ["south", 17.05]] as const) {
+      stage.set(`detail:site:route-edge:${key}`, {
+        geometry: "box",
+        position: [-3.6, 0.02, z],
+        size: [6.8, 0.016, 0.1],
+        color: 0xe8ecee,
+        unlit: true,
+        decorative: true,
+      })
+    }
+    for (let x = -1.4; x > -6.6; x -= 1.3) {
+      stage.set(`detail:site:route-dash:${x.toFixed(1)}`, {
+        geometry: "box",
+        position: [x, 0.022, 16],
+        size: [0.6, 0.016, 0.12],
+        color: 0xe8ecee,
+        unlit: true,
+        decorative: true,
+      })
+    }
+    for (const [key, x, z] of [
+      ["a", -1.8, 14.4],
+      ["b", -1.8, 17.6],
+      ["c", -5.2, 14.4],
+      ["d", -5.2, 17.6],
+    ] as const) {
+      stage.set(`detail:site:bollard:${key}`, {
+        geometry: "cylinder",
+        position: [x, 0.45, z],
+        size: [0.16, 0.9, 0.16],
+        color: HAZARD_YELLOW,
+        metal: true,
+        decorative: true,
+      })
+    }
+
+    // The muster point stands on a marked hardstanding, not on open ground.
+    stage.set("detail:site:muster-pad", {
+      geometry: "box",
+      position: [-8.4, 0.012, 16],
+      size: [5, 0.012, 6],
+      color: shade(PAVING, -0.08),
+      decorative: true,
+    })
+    for (const [key, position, size] of [
+      ["n", [-8.4, 0.024, 13.05], [5, 0.016, 0.12]],
+      ["s", [-8.4, 0.024, 18.95], [5, 0.016, 0.12]],
+      ["w", [-10.85, 0.024, 16], [0.12, 0.016, 6]],
+      ["e", [-5.95, 0.024, 16], [0.12, 0.016, 6]],
+    ] as [string, Vec3, Vec3][]) {
+      stage.set(`detail:site:muster-line:${key}`, {
+        geometry: "box",
+        position,
+        size,
+        color: EXIT_SIGN,
+        unlit: true,
+        decorative: true,
+      })
+    }
+    // Posts and a foundation behind the sign board, so it is a sign on a post
+    // rather than a green panel standing on the grass.
+    for (const [key, x] of [["north", -7.3], ["south", -6.7]] as const) {
+      stage.set(`detail:site:muster-post:${key}`, {
+        geometry: "cylinder",
+        position: [x, 1.05, 16.12],
+        size: [0.08, 2.1, 0.08],
+        color: 0x7f868b,
+        metal: true,
+        decorative: true,
+      })
+    }
+    stage.set("detail:site:muster-base", {
+      geometry: "box",
+      position: [-7, 0.06, 16.06],
+      size: [1.1, 0.12, 0.5],
+      color: shade(PAVING, 0.2),
+      decorative: true,
+    })
+
+    this.buildExitFace()
+  }
+
+  /** The west final exit and the east inlet, read from outside the envelope. */
+  private buildExitFace(): void {
+    const stage = this.stage
+
+    // A canopy over the final exit: the one piece of massing that says "this
+    // is the way out" from across the yard.
+    stage.set("detail:site:canopy", {
+      geometry: "box",
+      position: [-0.7, 2.72, 16],
+      size: [1.8, 0.14, 3.4],
+      color: shade(FABRIC, 0.1),
+      decorative: true,
+    })
+    for (const [key, z] of [["north", 14.5], ["south", 17.5]] as const) {
+      stage.set(`detail:site:canopy-stay:${key}`, {
+        geometry: "cylinder",
+        position: [-0.8, 3.05, z],
+        size: [0.05, 1.49, 0.05],
+        direction: [1.4, 0.5, 0],
+        color: 0x7f868b,
+        metal: true,
+        decorative: true,
+      })
+    }
+    // External exit sign and threshold, on the face the escaping occupant
+    // never sees but the returning marshal does.
+    stage.set("detail:site:exit-sign", {
+      geometry: "box",
+      position: [-0.17, 2.46, 16],
+      size: [0.05, 0.3, 0.9],
+      color: EXIT_SIGN,
+      unlit: true,
+      decorative: true,
+    })
+    stage.set("detail:site:threshold", {
+      geometry: "box",
+      position: [-0.25, 0.02, 16],
+      size: [0.7, 0.02, 2.6],
+      color: shade(PAVING, 0.24),
+      decorative: true,
+    })
+    for (const [key, z] of [["north", 14.62], ["south", 17.38]] as const) {
+      stage.set(`detail:site:exit-jamb:${key}`, {
+        geometry: "box",
+        position: [-0.14, 1.15, z],
+        size: [0.16, 2.3, 0.16],
+        color: FRAME_,
+        decorative: true,
+      })
+    }
+
+    // The inlet's own frontage: hardstanding to pump off, bollards so nothing
+    // reverses into it, and a keep-clear box on the ground.
+    stage.set("detail:site:inlet-hardstanding", {
+      geometry: "box",
+      position: [50.4, 0.014, 10],
+      size: [2.6, 0.014, 3.2],
+      color: shade(PAVING, -0.08),
+      decorative: true,
+    })
+    for (const [key, position, size] of [
+      ["n", [50.4, 0.026, 8.46], [2.6, 0.016, 0.12]],
+      ["s", [50.4, 0.026, 11.54], [2.6, 0.016, 0.12]],
+      ["e", [51.64, 0.026, 10], [0.12, 0.016, 3.2]],
+    ] as [string, Vec3, Vec3][]) {
+      stage.set(`detail:site:inlet-line:${key}`, {
+        geometry: "box",
+        position,
+        size,
+        color: HAZARD_YELLOW,
+        unlit: true,
+        decorative: true,
+      })
+    }
+    for (const [key, z] of [["north", 8.7], ["south", 11.3]] as const) {
+      stage.set(`detail:site:inlet-bollard:${key}`, {
+        geometry: "cylinder",
+        position: [49.5, 0.45, z],
+        size: [0.18, 0.9, 0.18],
+        color: HAZARD_YELLOW,
+        metal: true,
+        decorative: true,
+      })
+    }
   }
 
   private buildDockDetails(): void {
@@ -684,7 +945,46 @@ export class TrainingScene implements TrainingRenderer {
       placeDecorativeAsset(this.stage, {
         id: `detail:ext:${element.id}`,
         position: element.position,
-        parts: extinguisherTrimParts(element.size, type, -1),
+        parts: extinguisherTrimParts(
+          element.size,
+          type,
+          -1,
+          element.position[2] - CORRIDOR_WALL_FACE,
+        ),
+      })
+    }
+
+    // The alarm panel and the dry riser: both are wall-hung, and both were
+    // boxes. Neither is answerable by shape alone, but a learner who cannot
+    // tell them apart across a corridor is not being taught anything.
+    const panel = ELEMENT_BY_ID.get("FIRE-PANEL-01")
+    if (panel) {
+      placeDecorativeAsset(this.stage, {
+        id: "detail:fire:panel",
+        position: panel.position,
+        parts: firePanelParts(panel.size, panel.position[2] - CORRIDOR_WALL_FACE),
+      })
+    }
+
+    const inlet = ELEMENT_BY_ID.get("FIRE-INLET-01")
+    if (inlet) {
+      placeDecorativeAsset(this.stage, {
+        id: "detail:fire:inlet",
+        position: inlet.position,
+        parts: dryRiserInletParts(inlet.size),
+      })
+    }
+
+    // Landing valves tee off the riser and face into the core, so the outlet
+    // is aimed away from the pipe it comes off.
+    const riser = ELEMENT_BY_ID.get("FIRE-RSR-01")
+    for (const id of ["FIRE-STPIPE-L0", "FIRE-STPIPE-L1"] as const) {
+      const valve = ELEMENT_BY_ID.get(id)
+      if (!valve || !riser) continue
+      placeDecorativeAsset(this.stage, {
+        id: `detail:fire:${id}`,
+        position: valve.position,
+        parts: landingValveParts(valve.size, riser.position[0] - valve.position[0]),
       })
     }
 
