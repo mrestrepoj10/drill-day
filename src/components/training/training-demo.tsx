@@ -180,6 +180,9 @@ const DRILLS: Drill[] = [
   },
 ];
 
+/** Chrome drawn over the model: the viewer's own gestures must not claim it. */
+const VIEWER_UI = "[data-viewer-marker],[data-viewer-ui]";
+
 type PickNotice = {
   message: string;
   tone: "neutral" | "good" | "near" | "bad";
@@ -532,7 +535,7 @@ export function TrainingDemo() {
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-    if ((event.target as Element).closest("[data-viewer-marker]")) return;
+    if ((event.target as Element).closest(VIEWER_UI)) return;
     // Ask on the press, so the release knows whether this click bought the
     // camera or was made with it.
     heldAtPress.current = getStage()?.looking ?? false;
@@ -591,6 +594,14 @@ export function TrainingDemo() {
   }, []);
 
   const onPointerUp = (event: React.PointerEvent) => {
+    // Controls drawn over the model are chrome, not scene. Without this the
+    // section's capture handlers run first and a press on one of them takes
+    // the camera or answers the step, and can unmount the control before its
+    // own click ever fires.
+    if ((event.target as Element).closest(VIEWER_UI)) {
+      press.current = null;
+      return;
+    }
     const start = press.current;
     press.current = null;
     const held = getStage()?.looking ?? false;
@@ -926,6 +937,7 @@ export function TrainingDemo() {
                     type="button"
                     variant="ghost"
                     size="xs"
+                    data-viewer-ui=""
                     onClick={notice.action.run}
                     className="pointer-events-auto -mr-1 text-interactive hover:text-foreground"
                   >
