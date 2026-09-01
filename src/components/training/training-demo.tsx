@@ -929,7 +929,17 @@ export function TrainingDemo() {
           ) : null}
 
           {notice ? (
-            <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-[4.75rem] z-30 flex justify-center px-4">
+            <div
+              aria-live="polite"
+              className={
+                notice.action
+                  ? // An invitation points at the thing it is inviting you to,
+                    // so it sits under the Activity toggle rather than over the
+                    // model. A verdict is about the model and stays centred.
+                    "pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-end pr-3"
+                  : "pointer-events-none absolute inset-x-0 top-[4.75rem] z-30 flex justify-center px-4"
+              }
+            >
               <div className={`surface-pop flex max-w-lg items-center gap-2 rounded-md border px-3 py-2 text-center text-[12px] font-medium tone-${notice.tone}`}>
                 <span>{notice.message}</span>
                 {notice.action ? (
