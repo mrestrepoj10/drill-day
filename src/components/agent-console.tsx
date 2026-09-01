@@ -554,6 +554,16 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
       tone: "agent",
     };
   }
+  if (decision.kind === "reselect") {
+    return {
+      id: `decision-${decision.at}-${index}`,
+      at: decision.at,
+      actor: "Learner",
+      title: `Confirmed ${element?.name ?? decision.element ?? "the same component"}`,
+      detail: "Clicked it again. The verdict already recorded stands.",
+      tone: "neutral",
+    };
+  }
   if (decision.kind === "inspect") {
     return {
       id: `decision-${decision.at}-${index}`,

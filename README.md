@@ -39,7 +39,7 @@ If the browser does not yet implement WebMCP, a faithful same-document polyfill 
 - A three.js viewport builds the model at runtime from the facility graph, so the demo needs no uploaded design file, token, or CAD pipeline.
 - Stable training IDs stay separate from render-instance IDs.
 - Exact hit testing is backed by a screen-space semantic fallback for small valves, with an occlusion guard to prevent through-wall answers.
-- Revealed labels and the agent's pinned notes are accessible DOM markers, while drag distance and pointer identity prevent first-person walk gestures from becoming accidental selections. Selection is singular and clicking the selected component again clears it.
+- Revealed labels and the agent's pinned notes are accessible DOM markers, while drag distance and pointer identity prevent first-person walk gestures from becoming accidental selections. Selection is singular. Clicking it again clears it while you are browsing; once a step has marked an answer the verdict stands, and the repeat click is recorded rather than quietly undoing it.
 - The floor plan opens by default, keeps the walked route out of the 3D scene, and cannot teleport a learner past a navigation objective.
 - The activity log merges agent calls, learner selections and deselections, guardrails, coaching, and room-entry events.
 

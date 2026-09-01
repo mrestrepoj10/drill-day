@@ -254,12 +254,15 @@ export class Stage implements WalkWorld {
   /**
    * Screen point → stage id.
    *
-   * Looks *past* decoration rather than being stopped by it. The ray already
-   * arrives as a distance-sorted list, so the first selectable thing along it
-   * is the answer; taking hit[0] and dropping it when it happened to be trim
-   * meant a bracket or an ID collar in front of a valve silently cost the
-   * exact hit, leaving only a centre-distance tolerance that works from some
-   * angles and not others.
+   * Looks *past* trim rather than being stopped by it: the ray arrives
+   * distance-sorted, so a bracket or an ID collar in front of a valve no
+   * longer costs the exact hit and leaves only a centre-distance tolerance
+   * that works from some angles and not others.
+   *
+   * It stops dead at construction, though. Walls and slabs are decorative too
+   * — they are not answers — so skipping everything decorative let the ray
+   * carry on through them and name equipment in the next room, or on the floor
+   * below. Trim you see past; a wall you do not.
    */
   pick(clientX: number, clientY: number): StageItem | undefined {
     return this.rawHit(clientX, clientY, true)?.item
@@ -366,7 +369,12 @@ export class Stage implements WalkWorld {
       // matching the old `hitTest(..., ignoreTransparent)` behaviour.
       if ((item.opacity ?? 1) < 1) continue
       if (planes.some((p) => p.distanceToPoint(hit.point) < 0)) continue
-      if (selectableOnly && item.decorative) continue
+      if (selectableOnly && item.decorative) {
+        // Opaque construction ends the ray; anything behind it is out of sight
+        // and must not be nameable, let alone answerable.
+        if (this.sightBlockers.some((p) => hit.object.name.startsWith(p))) return undefined
+        continue
+      }
       return { item, distance: hit.distance }
     }
     return undefined
@@ -389,6 +397,28 @@ export class Stage implements WalkWorld {
    * already boxed in as `wall:stair-store`.
    */
   walkSolids: readonly string[] = ["wall:", "slab:", "ramp:", "stair:rail-", "stair:post-"]
+
+  /**
+   * Opaque construction, for the pick ray.
+   *
+   * Not the same list as `walkSolids`: a handrail stops a body and should not
+   * stop a gaze, and a stair soffit is the reverse. What these share is that
+   * you cannot see through them, so a pick must stop here rather than name
+   * whatever is behind.
+   */
+  sightBlockers: readonly string[] = [
+    "wall:",
+    "slab:",
+    // Stair structure — treads, nosings and the raking waists under them. The
+    // guards (`stair:rail-`, `stair:post-`) are deliberately absent: a
+    // handrail stops a body, not a gaze, and equipment seen through a
+    // balustrade must stay nameable.
+    "ramp:",
+    "stair:flight",
+    "leaf:",
+    "jamb:",
+    "head:",
+  ]
 
   /**
    * Rebuilds the walk collider from the current scene. Called for you the

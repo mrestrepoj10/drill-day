@@ -278,6 +278,15 @@ class ViewerTrainingRuntime implements ViewerTraining {
         // looking exactly like the click had never registered.
         const answered = this.session.selection.verdict
         if (answered) {
+          // The verdict stands, but the click still happened, and every human
+          // choice belongs in the one audit trail — including the second and
+          // third click someone makes to be sure it registered.
+          // No verdict on the record: the answer was already marked, and
+          // anything that consumes verdicts — the stage feedback, and the
+          // replay, which holds 1.4s on every verdict-bearing decision —
+          // would otherwise treat a double click as a second graded moment.
+          this.record({ kind: "reselect", by: "learner", element: id })
+          this.emit()
           return { action: "selected", message: answered.message, verdict: answered }
         }
         this.renderer?.setSelection(null)
