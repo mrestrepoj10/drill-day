@@ -406,7 +406,19 @@ export class Stage implements WalkWorld {
    * you cannot see through them, so a pick must stop here rather than name
    * whatever is behind.
    */
-  sightBlockers: readonly string[] = ["wall:", "slab:", "ramp:", "stair:", "leaf:", "jamb:", "head:"]
+  sightBlockers: readonly string[] = [
+    "wall:",
+    "slab:",
+    // Stair structure — treads, nosings and the raking waists under them. The
+    // guards (`stair:rail-`, `stair:post-`) are deliberately absent: a
+    // handrail stops a body, not a gaze, and equipment seen through a
+    // balustrade must stay nameable.
+    "ramp:",
+    "stair:flight",
+    "leaf:",
+    "jamb:",
+    "head:",
+  ]
 
   /**
    * Rebuilds the walk collider from the current scene. Called for you the
