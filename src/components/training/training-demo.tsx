@@ -40,10 +40,17 @@ const OVERVIEW = Stage.frame([24, 3, 16], 82, -1.05, 0.66);
  * How long the agent has to stay quiet before a tour counts as over.
  *
  * Not a duration for the tour — a wait for the agent, which is a different
- * thing: it thinks between calls, and a fixed clock would cut a briefing off
- * mid-sentence. Every call it makes puts this back to the beginning.
+ * thing: it thinks between calls, and a fixed clock cuts a briefing off
+ * mid-sentence. A real run took two minutes over a dozen calls, so the gaps
+ * are seconds to tens of seconds and they are not knowable in advance.
+ *
+ * So the wait learns the pace it is waiting on: whatever the longest gap this
+ * tour has shown, times a margin, floored so a brisk opening does not set an
+ * impatient window and capped so a stall does not hold the camera forever.
  */
-const TOUR_QUIET_MS = 15_000;
+const TOUR_QUIET_MIN_MS = 20_000;
+const TOUR_QUIET_MAX_MS = 90_000;
+const TOUR_QUIET_MARGIN = 3;
 
 /**
  * Whether a tool call is running at this instant.
@@ -364,6 +371,9 @@ export function TrainingDemo() {
   // The journal's own sequence number, which keeps counting past the entry
   // cap that holds `calls.length` still. Every call moves it, whoever made it.
   const lastCallId = calls.length ? calls[calls.length - 1].id : 0;
+  // The pace of the agent driving this tour: when its last call landed, and
+  // the longest it has gone between two of them.
+  const pace = useRef({ at: 0, longest: 0 });
 
   const sessionStatus = session.status;
   useEffect(() => {
@@ -392,6 +402,15 @@ export function TrainingDemo() {
     // Waiting on the agent, not running a clock on the tour: every call it
     // makes re-runs this effect and starts the wait again, so a long briefing
     // is never cut off between two notes.
+    const now = Date.now();
+    if (pace.current.at) {
+      pace.current.longest = Math.max(pace.current.longest, now - pace.current.at);
+    }
+    pace.current.at = now;
+    const wait = Math.min(
+      TOUR_QUIET_MAX_MS,
+      Math.max(TOUR_QUIET_MIN_MS, pace.current.longest * TOUR_QUIET_MARGIN),
+    );
     const timer = setTimeout(() => {
       training?.exitWalk();
       void getStage()?.flyTo(tourFrom, 900);
@@ -399,8 +418,9 @@ export function TrainingDemo() {
       // beside it, and what someone wants in front of them after a briefing is
       // the thing that starts the drill.
       setMissionPaneOpen(true);
+      pace.current = { at: 0, longest: 0 };
       setTourFrom(null);
-    }, TOUR_QUIET_MS);
+    }, wait);
     return () => clearTimeout(timer);
   }, [tourFrom, lastCallId, getStage, training]);
 
