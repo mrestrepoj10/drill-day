@@ -8,9 +8,17 @@ import { Button } from "@/components/ui/button";
  * The one thing to paste into an agentic browser to see the whole idea: it asks
  * for coaching and forbids the shortcut in the same breath, so the first thing
  * a judge sees is the page refusing.
+ *
+ * Starting is conditional rather than unconditional, and the condition is "no
+ * mission", not "not running". There are seven roles, and a finished drill
+ * reports `complete` while keeping its mission and its debrief — so asking an
+ * agent to start whenever nothing is *running* would have it wipe the
+ * firefighter debrief someone was reading. Only an untouched session has no
+ * mission at all, and that is the one case where starting is safe.
  */
 export const SUGGESTED_PROMPT =
-  "Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.";
+  "Read the current Drill Day session. If it has no mission yet, start the technician one. " +
+  "Then coach me through the objective without locating or revealing the answer.";
 
 /**
  * The other half of the pitch: one instruction that keeps the agent busy on its
