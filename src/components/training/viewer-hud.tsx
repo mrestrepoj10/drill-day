@@ -25,12 +25,15 @@ export function ViewerHud({
   session,
   stageLabel,
   hidden,
+  touring,
 }: {
   session: TrainingSession;
   /** "2 of 3 · Diagnose" — the panel's own wording for the open stage. */
   stageLabel: string;
   /** The mission drawer is open and already showing all of this. */
   hidden: boolean;
+  /** An agent is walking the building with no drill loaded. */
+  touring: boolean;
 }) {
   const step = session.step;
   const objective = `${session.mission?.id ?? ""}:${step?.id ?? ""}`;
@@ -51,14 +54,19 @@ export function ViewerHud({
     setOpen(true);
   }
 
-  if (session.status !== "running" || !step) return null;
+  // A tour has no objective to show, but it is exactly when "where are we"
+  // is hardest to answer: the camera is being driven by someone else, through
+  // rooms the learner did not choose. So the plan comes out on its own, with
+  // the notes the agent is pinning as it goes.
+  const running = session.status === "running" && !!step;
+  if (!running && !touring) return null;
 
   // Collapsed it is a single icon: the model is what the viewer is for, and
   // someone who has read the objective should be able to get the canvas back
   // without the panel leaving a footprint behind.
   if (!open) {
     return (
-      <div className="workspace-hud" data-collapsed="" data-hidden={hidden || undefined}>
+      <div className="workspace-hud" data-collapsed="" data-touring={touring || undefined} data-hidden={hidden || undefined}>
         <Button
           type="button"
           variant="ghost"
@@ -75,7 +83,7 @@ export function ViewerHud({
   }
 
   return (
-    <div className="workspace-hud" data-hidden={hidden || undefined}>
+    <div className="workspace-hud" data-touring={touring || undefined} data-hidden={hidden || undefined}>
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background/55 backdrop-blur-xl">
         <Button
           type="button"
@@ -88,10 +96,10 @@ export function ViewerHud({
           <Map className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
           <span className="min-w-0 flex-1">
             <span className="block text-[11px] font-semibold leading-[1.4] text-muted-foreground">
-              {stageLabel}
+              {step ? stageLabel : "ChatGPT is walking the building"}
             </span>
             <span className="mt-0.5 block text-pretty text-[12.5px] font-medium leading-[1.45] text-foreground">
-              {step.prompt}
+              {step ? step.prompt : "Follow along, or take the controls whenever you want them."}
             </span>
           </span>
           <ChevronDown className="mt-0.5 size-3.5 shrink-0 rotate-180 text-text-tertiary" aria-hidden="true" strokeWidth={1.5} />
@@ -104,9 +112,9 @@ export function ViewerHud({
               position={session.position}
               room={session.room}
               highlighted={session.revealed.flatMap((hint) => hint.reveals ?? [])}
-              cueElements={session.learningCuesOn ? learningCueElements(step) : []}
-              cueRooms={session.learningCuesOn ? learningCueRooms(step) : []}
-              destination={step.validDestination?.room}
+              cueElements={step && session.learningCuesOn ? learningCueElements(step) : []}
+              cueRooms={step && session.learningCuesOn ? learningCueRooms(step) : []}
+              destination={step?.validDestination?.room}
               annotations={session.annotations}
               trail={session.trail}
             />
