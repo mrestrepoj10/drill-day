@@ -364,6 +364,13 @@ a {
   }
 }
 
+/* On a tour it comes out at every width: the mission panel is not showing a
+   plan, because there is no mission, and "where has it taken me" is the one
+   question a walkthrough someone else is driving always raises. */
+.workspace-hud[data-touring] {
+  display: block;
+}
+
 /* The drawer that owns this content is open; it is saying all of it already. */
 .workspace-hud[data-hidden] {
   display: none;

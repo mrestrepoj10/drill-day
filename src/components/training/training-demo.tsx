@@ -9,8 +9,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Stage } from "@layer0/scene-render";
-import { pushAmbientContext, useModelContext, useModelContextTools } from "@layer0/webmcp";
+import { Stage, type CameraView } from "@layer0/scene-render";
+import { pushAmbientContext, toolJournal, useModelContext, useModelContextTools } from "@layer0/webmcp";
 import {
   learningCueRooms,
   loadTraining,
@@ -35,6 +35,34 @@ import { cn } from "@/lib/utils";
 
 const CUTAWAY_Y = LEVELS * STOREY - 0.6;
 const OVERVIEW = Stage.frame([24, 3, 16], 82, -1.05, 0.66);
+
+/**
+ * How long the agent has to stay quiet before a tour counts as over.
+ *
+ * Not a duration for the tour — a wait for the agent, which is a different
+ * thing: it thinks between calls, and a fixed clock would cut a briefing off
+ * mid-sentence. Every call it makes puts this back to the beginning.
+ */
+const TOUR_QUIET_MS = 15_000;
+
+/**
+ * Whether a tool call is running at this instant.
+ *
+ * The journal writes an entry the moment a call starts and stamps `durationMs`
+ * when it settles, so an unstamped entry is a call still in flight. That is
+ * how the page tells "something walked us in here" from "the learner pressed
+ * look around": both put the camera on foot, and only one of them happens
+ * inside a tool. Origin is deliberately not part of it — a rehearsal drill is
+ * page-originated and is still the model being toured rather than walked.
+ *
+ * Read off the journal rather than React state, because the camera moves
+ * before the render that would carry it.
+ */
+function midToolCall(): boolean {
+  const calls = toolJournal.list();
+  const last = calls[calls.length - 1];
+  return !!last && last.durationMs === undefined;
+}
 
 const IDLE: TrainingSession = {
   version: 0,
@@ -224,6 +252,12 @@ export function TrainingDemo() {
   // have to be there when it does.
   const [onFoot, setOnFoot] = useState(false);
   const [missionPaneOpen, setMissionPaneOpen] = useState(true);
+  // Where the camera stood when the agent set off, and where it goes back to
+  // when the agent goes quiet. Null whenever no tour is running.
+  const [tourFrom, setTourFrom] = useState<CameraView | null>(null);
+  // The last pose the camera held while not on foot, kept so the tour has
+  // somewhere to return to that the learner actually chose.
+  const restingView = useRef<CameraView | null>(null);
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
   const modelContext = useModelContext();
@@ -278,14 +312,6 @@ export function TrainingDemo() {
   }, [getStage, status]);
 
   useEffect(() => {
-    const stage = getStage();
-    if (!stage) return;
-    // Subscribe only: the stage boots in orbit, and every entry into or exit
-    // from walk moves the camera, so the first callback carries the truth.
-    return stage.onCamera(() => setOnFoot(stage.walking));
-  }, [getStage, status]);
-
-  useEffect(() => {
     if (!training) return;
     return training.onCeiling(() => setSectionOn(training.ceilingOpen));
   }, [training]);
@@ -335,6 +361,53 @@ export function TrainingDemo() {
     () => calls.reduce((count, call) => count + (call.origin === "agent" ? 1 : 0), 0),
     [calls],
   );
+  // The journal's own sequence number, which keeps counting past the entry
+  // cap that holds `calls.length` still. Every call moves it, whoever made it.
+  const lastCallId = calls.length ? calls[calls.length - 1].id : 0;
+
+  const sessionStatus = session.status;
+  useEffect(() => {
+    const stage = getStage();
+    if (!stage) return;
+    // Subscribe only: the stage boots in orbit, and every entry into or exit
+    // from walk moves the camera, so the first callback carries the truth.
+    return stage.onCamera(() => {
+      const walking = stage.walking;
+      setOnFoot(walking);
+      if (!walking) {
+        restingView.current = stage.currentView() ?? null;
+        return;
+      }
+      // An agent putting the camera on foot with no drill loaded is giving a
+      // tour. The panel steps aside for it — a tour is the model and the plan,
+      // not the brief — and the pose it set off from is kept to come back to.
+      if (sessionStatus === "running" || !midToolCall()) return;
+      setTourFrom((from) => from ?? restingView.current ?? OVERVIEW);
+      setMissionPaneOpen(false);
+    });
+  }, [getStage, status, sessionStatus]);
+
+  useEffect(() => {
+    if (!tourFrom) return;
+    // Waiting on the agent, not running a clock on the tour: every call it
+    // makes re-runs this effect and starts the wait again, so a long briefing
+    // is never cut off between two notes.
+    const timer = setTimeout(() => {
+      training?.exitWalk();
+      void getStage()?.flyTo(tourFrom, 900);
+      // All the way back, panel included: the notes stay pinned on the model
+      // beside it, and what someone wants in front of them after a briefing is
+      // the thing that starts the drill.
+      setMissionPaneOpen(true);
+      setTourFrom(null);
+    }, TOUR_QUIET_MS);
+    return () => clearTimeout(timer);
+  }, [tourFrom, lastCallId, getStage, training]);
+
+  // A drill starting mid-tour is the agent handing over, not finishing: the
+  // mission owns the camera from here, so the tour ends where it stands.
+  if (tourFrom && session.status === "running") setTourFrom(null);
+
   const [invited, setInvited] = useState(false);
   if (agentCallCount > 0 && !invited) {
     setInvited(true);
@@ -903,6 +976,7 @@ export function TrainingDemo() {
             session={session}
             stageLabel={hudStageLabel}
             hidden={missionPaneOpen}
+            touring={!!tourFrom}
           />
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 
