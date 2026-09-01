@@ -296,7 +296,7 @@ function MissionLaunch({
             />
           </div>
           <p className="mt-3 text-pretty text-[12px] leading-[1.5] text-text-tertiary">
-            Start the drill first — the prompt asks your agent to read the session you are in.
+            Either order. Your agent reads the live session, and starts the drill if you have not.
           </p>
         </div>
 

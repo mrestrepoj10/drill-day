@@ -12,7 +12,7 @@
 
 1. Start **Leak in Room 214**.
 2. Open **Agent tools** in the navbar before calling anything: it lists all 15 site tools and names the ones this stage has switched off, with what withholding each one teaches.
-3. Ask the agent: “Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.”
+3. Ask the agent: “Read the current Drill Day session. If no drill is running, start the technician one. Then coach me through the objective without locating or revealing the answer.” It works whichever order you paste it in — the agent reads the live session and starts the drill only if you have not.
 4. Attempt `training_locate_element` during the navigation step and observe the deterministic refusal in the activity log.
 5. Use the default-on Learning cues to compare the same fair candidate context in the floor plan and the 3D model, then toggle it off and on to see that learner choice enter the activity log.
 6. Walk to Room 214 with the default-open floor plan tracking the route, request a hint, and use the clickable marker or tolerant 3D selection.

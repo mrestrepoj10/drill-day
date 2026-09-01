@@ -8,9 +8,16 @@ import { Button } from "@/components/ui/button";
  * The one thing to paste into an agentic browser to see the whole idea: it asks
  * for coaching and forbids the shortcut in the same breath, so the first thing
  * a judge sees is the page refusing.
+ *
+ * Starting is conditional rather than unconditional, and that matters: there
+ * are seven roles, so an unconditional "start the technician drill" would
+ * silently throw away a drill someone had already chosen. Read first, start
+ * only if there is nothing to coach — which also means the prompt works
+ * whichever order it is pasted in.
  */
 export const SUGGESTED_PROMPT =
-  "Read the current Drill Day session. Coach me through the objective without locating or revealing the answer.";
+  "Read the current Drill Day session. If no drill is running, start the technician one. " +
+  "Then coach me through the objective without locating or revealing the answer.";
 
 /**
  * The other half of the pitch: one instruction that keeps the agent busy on its
