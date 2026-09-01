@@ -176,6 +176,7 @@ export function TrainingPanel({
                   highlighted={highlighted}
                   cueElements={cueElements}
                   cueRooms={cueRooms}
+                  destination={session.step?.validDestination?.room}
                   annotations={session.annotations}
                   trail={session.trail}
                 />
