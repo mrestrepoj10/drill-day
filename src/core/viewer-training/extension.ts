@@ -89,6 +89,10 @@ export interface ViewerTraining {
   setSection(y: number | null): void
   /** Lifts the ceiling tiles out of the grid, or drops them back in. */
   openCeiling(open: boolean): void
+  /** Whether the tiles are currently lifted. */
+  readonly ceilingOpen: boolean
+  /** Called whenever that changes, by whoever changed it. */
+  onCeiling(fn: () => void): () => void
   goToLevel(level: number): Promise<void>
 
   element(id: ElementRef): TrainingElement | undefined
@@ -140,6 +144,11 @@ class ViewerTrainingRuntime implements ViewerTraining {
 
     private session: TrainingSession = { ...EMPTY }
     private listeners = new Set<() => void>()
+    // The ceiling is not part of the session — it is a way of looking, not a
+    // fact about the drill — but the toolbar's toggle has to show the truth
+    // even when the agent was the one who lifted the tiles.
+    private ceilingListeners = new Set<() => void>()
+    private ceiling = false
     private stepOpenedAt = 0
     private lastSample: Vec3 | null = null
     private onCameraChange = () => this.sampleWalker()
@@ -566,6 +575,7 @@ class ViewerTrainingRuntime implements ViewerTraining {
       this.attachWalkListener()
       // Inside the building now, so the ceiling belongs over the learner's head.
       this.renderer?.setCeiling?.(true)
+      this.setCeilingOpen(false)
       this.handle.requestRender()
       this.sampleWalker()
     }
@@ -573,12 +583,32 @@ class ViewerTrainingRuntime implements ViewerTraining {
     openCeiling(open: boolean): void {
       this.renderer?.setCeiling?.(!open)
       this.handle.requestRender()
+      this.setCeilingOpen(open)
+    }
+
+    get ceilingOpen(): boolean {
+      return this.ceiling
+    }
+
+    onCeiling(fn: () => void): () => void {
+      this.ceilingListeners.add(fn)
+      return () => this.ceilingListeners.delete(fn)
+    }
+
+    private setCeilingOpen(open: boolean): void {
+      if (this.ceiling === open) return
+      this.ceiling = open
+      for (const fn of this.ceilingListeners) fn()
     }
 
     exitWalk(): void {
       this.walkEpoch++
       this.detachWalkListener()
+      // Lifted, but not "open" as far as the toggle is concerned: outside the
+      // building the tiles are simply not in the way, and there is nothing for
+      // a control that only means something on foot to be showing.
       this.renderer?.setCeiling?.(false)
+      this.setCeilingOpen(false)
       if (!this.walking) return
       this.walking = false
       this.handle.rig.exitWalk()

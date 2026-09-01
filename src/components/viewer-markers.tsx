@@ -11,11 +11,14 @@ export interface Marker {
   children: ReactNode;
 }
 
+/** Gap in pixels between a label's foot and the part it names. */
+const LIFT = 12;
+
 const TONE: Record<NonNullable<Marker["tone"]>, string> = {
-  neutral: "border-border bg-background/85 text-foreground",
-  cool: "border-interactive/50 bg-interactive/10 text-interactive",
-  warm: "border-warning/50 bg-warning/10 text-warning",
-  alert: "border-destructive/60 bg-destructive/10 text-destructive",
+  neutral: "label-neutral",
+  cool: "label-cool",
+  warm: "label-warm",
+  alert: "label-alert",
 };
 
 /**
@@ -78,7 +81,10 @@ export function ViewerMarkers({
             if (overlaps) box.y = done.y - done.h - 6;
           }
           placed.push(box);
-          box.el.style.transform = `translate3d(${box.x}px, ${box.y}px, 0) translate(-50%, -100%)`;
+          // Lifted clear of the anchor: a label resting flush on the part hides
+          // its top edge, which matters most when the camera has been framed on
+          // that part precisely so it can be looked at.
+          box.el.style.transform = `translate3d(${box.x}px, ${box.y - LIFT}px, 0) translate(-50%, -100%)`;
           box.el.style.visibility = "visible";
         }
       }

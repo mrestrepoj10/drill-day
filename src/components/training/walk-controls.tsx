@@ -20,7 +20,9 @@ export type LookMode = "click" | "drag";
  * that reads as decoration by the second minute:
  *
  * 1. Before the lock — an invitation, because a click spent engaging the
- *    camera silently reads as "clicking does not work".
+ *    camera silently reads as "clicking does not work". It shares the locked
+ *    bar's place at the foot of the canvas, so taking the lock swaps the words
+ *    without moving them, and neither state ever covers the model.
  * 2. While locked — Escape, permanently. Chrome shows its own "has control of
  *    your cursor" banner and no API can hide it; the only thing that turns
  *    that banner from a surprise into a confirmation is the page having said
@@ -76,10 +78,12 @@ export function WalkControls({
   }
 
   return (
-    // Centred, and only until the lock is taken: this is the call to action
-    // that stops the first click being spent in silence.
-    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
-      <div className="surface-pop pointer-events-auto flex max-w-[min(20rem,100%)] flex-col items-center gap-2.5 rounded-xl border border-border bg-background/95 px-5 py-4 text-center backdrop-blur-md">
+    // In the same bottom band as the locked bar, not dead centre. It is still
+    // the call to action that stops the first click being spent in silence,
+    // but the middle of the canvas belongs to the model — and an agent pinning
+    // a note frames its element right there, which a centred card would hide.
+    <div className="walk-bar">
+      <div className="surface-pop pointer-events-auto flex max-w-[min(22rem,100%)] flex-col items-center gap-2.5 rounded-xl border border-border bg-background/95 px-5 py-3.5 text-center backdrop-blur-md">
         <Button type="button" size="sm" onClick={onLook}>
           <Eye className="size-3.5" aria-hidden="true" />
           Click to look around

@@ -499,6 +499,16 @@ export class Stage implements WalkWorld {
   // --- first-person look ---------------------------------------------------
 
   /** True while the pointer is locked to the viewport and driving the look. */
+  /** Whether the camera is on foot, mission or no mission. */
+  get walking(): boolean {
+    return this.handle.rig.mode === "walk"
+  }
+
+  /** Fires whenever the camera moves, which includes entering or leaving walk. */
+  onCamera(fn: () => void): () => void {
+    return this.handle.rig.onChange(fn)
+  }
+
   get looking(): boolean {
     return this.handle.rig.locked
   }

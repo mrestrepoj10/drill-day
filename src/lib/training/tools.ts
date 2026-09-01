@@ -1,6 +1,6 @@
 import { schema, type ModelContextTool } from "@layer0/webmcp"
-import type { Mission, TrainingStep, ViewerTraining } from "@layer0/viewer-training"
-import { ELEMENT_BY_ID, LEVELS, ROOMS, roomCentre, STOREY } from "./facility"
+import type { Mission, TrainingElement, TrainingRoom, TrainingStep, Vec3, ViewerTraining } from "@layer0/viewer-training"
+import { CLEAR, ELEMENT_BY_ID, EYE, FOOTPRINT, LEVELS, ROOMS, roomCentre, STOREY } from "./facility"
 import { MISSIONS, ROLES } from "./missions"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -466,10 +466,28 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         // has to ask the same question training_locate_element would be asked.
         // Moving it anyway would make "you may not show them where it is" a
         // rule with a note-shaped hole in it.
-        const framed = Boolean(show) && permits(t, "training_locate_element")
+        // And walking is walking, whoever asked for it: arriving in the
+        // destination room is what clears a reach step, so a note framed there
+        // would finish the learner's navigation for them. training_set_view
+        // refuses outright during one; this pins the note and leaves the
+        // camera alone, which is the same rule with the note still delivered.
+        const navigating = walkingIsTheExercise(t)
+        const framed = Boolean(show) && permits(t, "training_locate_element") && !navigating
         if (framed) {
-          const [x, y, z] = t.element(id)!.position
-          await t.applyViewerState({ camera: { position: [x + 7, y + 5, z + 7], target: [x, y, z] } })
+          const element = t.element(id)!
+          // Lit in the agent's own blue before the camera moves, so the thing
+          // the note is about is picked out of the services around it — a
+          // 22 m pipe read from one end is otherwise one grey line among many.
+          // Only when the camera is allowed to move: a highlight on a step
+          // that withholds locating would give away exactly what the guard is
+          // keeping back.
+          await t.applyViewerState({ highlight: [{ ids: [id], tone: "trace" }] })
+          await t.enterWalk(...standIn(element))
+          // Walking closes the ceiling, and a run in the void is then behind
+          // it: the note would land on a tile grid. Lift the tiles for those,
+          // the way someone pushing a tile up to look is how you see the
+          // pipework in this building at all.
+          if (aboveCeiling(element)) t.openCeiling(true)
         }
         return {
           pinnedTo: t.element(id)?.name ?? id,
@@ -477,9 +495,12 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
           framed,
           ...(show && !framed
             ? {
-                cameraHeld:
-                  "training_locate_element is switched off on this step, so the note is pinned but the " +
-                  "camera stayed where it was. Describe where it is instead — do not retry with show.",
+                cameraHeld: navigating
+                  ? "this step is a navigation objective and the learner has to walk it themselves, so the " +
+                    "note is pinned but the camera stayed where it was. Describe where it is instead — " +
+                    "do not retry with show."
+                  : "training_locate_element is switched off on this step, so the note is pinned but the " +
+                    "camera stayed where it was. Describe where it is instead — do not retry with show.",
               }
             : {}),
         }
@@ -498,6 +519,131 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         return { replayed: true }
       },
     },
+  ]
+}
+
+/**
+ * Where to stand to look at something, in first person.
+ *
+ * The camera used to jump to `position + [7, 5, 7]` and look back — which from
+ * inside a building is a spot in the next room, or outside the envelope
+ * entirely, so the note arrived with a wall behind it and no sign of the thing
+ * it was about. This backs off into the element's own room instead and looks at
+ * it from where a person could actually stand.
+ */
+/** A horizontal extent past which an element may be a run rather than a thing. */
+const RUN_LENGTH = 3
+/** And how many times its own girth it has to be before it definitely is one. */
+const RUN_SLENDERNESS = 4
+
+/**
+ * Where to stand to look at a long horizontal run.
+ *
+ * Backing off from the middle of a 22 m pipe puts the eye underneath it, which
+ * is a photograph of a ceiling: the pipe fills nothing, the neck cranes, and
+ * the corridor it serves is out of frame entirely. Standing off one end and
+ * looking down its length is how anyone actually reads a run — the pipe leads
+ * the eye away, and the space it feeds is what surrounds it.
+ */
+function alongRun(
+  element: TrainingElement,
+  room: TrainingRoom | undefined,
+): [Vec3, Vec3] | undefined {
+  const [x, y, z] = element.position
+  const [sizeX, sizeY, sizeZ] = element.size
+  const length = Math.max(sizeX, sizeZ)
+  const half = length / 2
+  // Long is not enough: a 3.2 m chiller is long, and looking down its side
+  // from one corner is the worst view of it there is. A run is long *and*
+  // slender — a pipe, a duct, a header.
+  const girth = Math.max(sizeY, Math.min(sizeX, sizeZ))
+  if (length < RUN_LENGTH || length < girth * RUN_SLENDERNESS) return undefined
+  const axisX = sizeX >= sizeZ
+
+  // Stand off the end nearer the middle of the room and look at the other, so
+  // the run recedes rather than passing overhead.
+  const centre = room
+    ? axisX
+      ? (room.bounds[0] + room.bounds[2]) / 2
+      : (room.bounds[1] + room.bounds[3]) / 2
+    : axisX
+      ? FOOTPRINT.x / 2
+      : FOOTPRINT.z / 2
+  const here = axisX ? x : z
+  const sign = centre < here ? -1 : 1
+  const near = here + sign * half
+  const far = here - sign * half
+
+  let ex = axisX ? near + sign * 2.5 : x
+  let ez = axisX ? z : near + sign * 2.5
+  if (room) {
+    const [minX, minZ, maxX, maxZ] = room.bounds
+    ex = Math.min(Math.max(ex, minX + 0.9), maxX - 0.9)
+    ez = Math.min(Math.max(ez, minZ + 0.9), maxZ - 0.9)
+  }
+  return [
+    [ex, element.level * STOREY, ez],
+    [axisX ? far : x, y - EYE, axisX ? z : far],
+  ]
+}
+
+/**
+ * Whether the learner is mid-way through a step they have to walk.
+ *
+ * Moving the camera on foot is graded: the runtime samples where the walker
+ * ended up and clears the step if that is where it asked them to be. So a
+ * camera move during a reach step is not a camera move, it is an answer.
+ */
+function walkingIsTheExercise(t: ViewerTraining): boolean {
+  const s = t.snapshot()
+  return s.status === "running" && s.step?.mode === "reach"
+}
+
+/** Whether the element sits in the ceiling void rather than in the room. */
+function aboveCeiling(element: TrainingElement): boolean {
+  return element.position[1] - element.level * STOREY >= CLEAR
+}
+
+function standIn(element: TrainingElement): [Vec3, Vec3] {
+  const [x, y, z] = element.position
+  const room = ROOMS.find((r) => r.id === element.room)
+  const run = alongRun(element, room)
+  if (run) return run
+  // Back off toward the middle of the room, so the walls stay behind the eye.
+  const [towardX, towardZ] = room
+    ? [(room.bounds[0] + room.bounds[2]) / 2, (room.bounds[1] + room.bounds[3]) / 2]
+    : [FOOTPRINT.x / 2, FOOTPRINT.z / 2]
+  let dx = towardX - x
+  let dz = towardZ - z
+  // An element sitting on the middle of its own room leaves no direction to
+  // retreat in; step out along the room's long axis rather than standing in it.
+  if (Math.hypot(dx, dz) < 0.5) {
+    const wide = room ? room.bounds[2] - room.bounds[0] > room.bounds[3] - room.bounds[1] : true
+    dx = wide ? 1 : 0
+    dz = wide ? 0 : 1
+  }
+  const reach = Math.hypot(dx, dz)
+  // Far enough for the part and what it connects to to share the frame, close
+  // enough to still be reading a valve rather than surveying a room.
+  // Anything overhead also has to be far enough away not to be read off the
+  // ceiling at a neck-breaking angle, and a CRAC cabinet needs more room than
+  // a DN25 valve before it stops being a wall of sheet metal.
+  const rise = Math.max(0, element.position[1] - element.level * STOREY - EYE)
+  const bulk = Math.max(...element.size)
+  const back = Math.min(8, Math.max(2.2, bulk * 2.5, rise * 2, Math.min(3.4, reach)))
+  let sx = x + (dx / reach) * back
+  let sz = z + (dz / reach) * back
+  if (room) {
+    const [minX, minZ, maxX, maxZ] = room.bounds
+    sx = Math.min(Math.max(sx, minX + 0.9), maxX - 0.9)
+    sz = Math.min(Math.max(sz, minZ + 0.9), maxZ - 0.9)
+  }
+  // `enterWalk` raises both the eye and the point it faces by the eye height,
+  // so the target is lowered by the same amount to look *at* the element
+  // rather than at the air above it.
+  return [
+    [sx, element.level * STOREY, sz],
+    [x, y - EYE, z],
   ]
 }
 
