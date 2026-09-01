@@ -532,6 +532,34 @@ a {
   color: var(--destructive);
 }
 
+/* Labels pinned to the model itself, where what sits behind one is very often
+   the component it names, drawn in that system's own colour. A tint laid over
+   the scene turns into camouflage exactly when the label matters most, so
+   these mix into the page background instead of over the model. */
+.label-neutral {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--background) 96%, transparent);
+  color: var(--foreground);
+}
+
+.label-cool {
+  border-color: color-mix(in srgb, var(--interactive) 45%, transparent);
+  background: color-mix(in srgb, var(--interactive) 12%, var(--background));
+  color: var(--interactive);
+}
+
+.label-warm {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, var(--background));
+  color: var(--warning);
+}
+
+.label-alert {
+  border-color: color-mix(in srgb, var(--destructive) 50%, transparent);
+  background: color-mix(in srgb, var(--destructive) 12%, var(--background));
+  color: var(--destructive);
+}
+
 .viewer-surface .adsk-viewing-viewer {
   background: var(--viewer-surface) !important;
 }

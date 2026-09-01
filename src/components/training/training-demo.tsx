@@ -208,6 +208,9 @@ export function TrainingDemo() {
   const hoverIdRef = useRef<string | null>(null);
   const [training, setTraining] = useState<ViewerTraining | null>(null);
   const [roleId, setRoleId] = useState("");
+  // Read back from the runtime rather than held here: the agent lifts the
+  // tiles too, when a note it is pinning sits above them, and a toggle that
+  // disagreed with the ceiling would cost the learner a dead press.
   const [sectionOn, setSectionOn] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [notice, setNotice] = useState<PickNotice>();
@@ -216,6 +219,10 @@ export function TrainingDemo() {
   // Where the lock cannot be had, looking is a drag and the UI has to say so
   // rather than keep inviting a click that will never take the camera.
   const [lookMode, setLookMode] = useState<LookMode>("click");
+  // On foot is a property of the camera, not of the mission: an agent can walk
+  // someone through the building with no drill loaded at all, and the controls
+  // have to be there when it does.
+  const [onFoot, setOnFoot] = useState(false);
   const [missionPaneOpen, setMissionPaneOpen] = useState(true);
   const [activityPaneOpen, setActivityPaneOpen] = useState(false);
 
@@ -270,6 +277,19 @@ export function TrainingDemo() {
     });
   }, [getStage, status]);
 
+  useEffect(() => {
+    const stage = getStage();
+    if (!stage) return;
+    // Subscribe only: the stage boots in orbit, and every entry into or exit
+    // from walk moves the camera, so the first callback carries the truth.
+    return stage.onCamera(() => setOnFoot(stage.walking));
+  }, [getStage, status]);
+
+  useEffect(() => {
+    if (!training) return;
+    return training.onCeiling(() => setSectionOn(training.ceilingOpen));
+  }, [training]);
+
   const getTraining = useCallback(() => training, [training]);
   const subscribe = useCallback(
     (onChange: () => void) => training?.subscribe(onChange) ?? (() => {}),
@@ -277,7 +297,7 @@ export function TrainingDemo() {
   );
   const snapshot = useCallback(() => training?.snapshot() ?? IDLE, [training]);
   const session = useSyncExternalStore(subscribe, snapshot, snapshot);
-  const walking = session.status === "running" && !!session.position;
+  const walking = onFoot || (session.status === "running" && !!session.position);
 
   // Nobody is left holding a cursor they cannot see. The moment the drill is
   // marked — or walking ends for any other reason — the pointer goes back on
@@ -788,16 +808,13 @@ export function TrainingDemo() {
     : challengeName;
 
   const toggleSection = () => {
-    const next = !sectionOn;
-    setSectionOn(next);
-    training?.openCeiling(next);
+    training?.openCeiling(!sectionOn);
   };
 
   const returnToOverview = useCallback(() => {
     training?.exitWalk();
     training?.setSection(CUTAWAY_Y);
     sceneRef.current?.setCeiling(false);
-    setSectionOn(false);
     void getStage()?.flyTo(OVERVIEW, 520);
   }, [getStage, training]);
 
