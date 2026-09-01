@@ -398,7 +398,14 @@ export function TrainingDemo() {
   }, [getStage, status, sessionStatus]);
 
   useEffect(() => {
-    if (!tourFrom) return;
+    if (!tourFrom) {
+      // Whatever ended the tour — the wait running out, or a drill taking it
+      // over — the next one starts from scratch. A timestamp carried across
+      // would read the whole interval between two tours as one thinking
+      // pause, and open the next one on the 90-second cap.
+      pace.current = { at: 0, longest: 0 };
+      return;
+    }
     // Waiting on the agent, not running a clock on the tour: every call it
     // makes re-runs this effect and starts the wait again, so a long briefing
     // is never cut off between two notes.
@@ -418,7 +425,6 @@ export function TrainingDemo() {
       // beside it, and what someone wants in front of them after a briefing is
       // the thing that starts the drill.
       setMissionPaneOpen(true);
-      pace.current = { at: 0, longest: 0 };
       setTourFrom(null);
     }, wait);
     return () => clearTimeout(timer);
