@@ -216,6 +216,16 @@ type PickNotice = {
   tone: "neutral" | "good" | "near" | "bad";
   /** Turns the notice into an invitation rather than a verdict. */
   action?: { label: string; run: () => void };
+  /**
+   * Where on the canvas it belongs.
+   *
+   * A verdict is about the model, so it arrives over the middle of it. A
+   * notice about the activity feed is about a control in the top bar, and
+   * centred over the viewer it is a sentence pointing at nothing — at panel
+   * widths the middle of the canvas is most of a screen away from the toggle
+   * it is asking you to press.
+   */
+  anchor?: "centre" | "activity";
 };
 type HoverLabel = {
   id: string;
@@ -415,6 +425,7 @@ export function TrainingDemo() {
       message: "ChatGPT is working in this page.",
       tone: "neutral",
       action: { label: "Watch it", run: () => openActivityPane() },
+      anchor: "activity",
     });
   }
 
@@ -1020,7 +1031,16 @@ export function TrainingDemo() {
           ) : null}
 
           {notice ? (
-            <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-[4.75rem] z-30 flex justify-center px-4">
+            <div
+              aria-live="polite"
+              className={`pointer-events-none absolute top-[4.75rem] z-30 flex px-4 ${
+                notice.anchor === "activity"
+                  ? // Under the toggle it is asking for, at any width: the
+                    // viewer's right edge is the window's in both layouts.
+                    "right-0 justify-end"
+                  : "inset-x-0 justify-center"
+              }`}
+            >
               <div className={`surface-pop flex max-w-lg items-center gap-2 rounded-md border px-3 py-2 text-center text-[12px] font-medium tone-${notice.tone}`}>
                 <span>{notice.message}</span>
                 {notice.action ? (
