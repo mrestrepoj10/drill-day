@@ -180,7 +180,15 @@ const DRILLS: Drill[] = [
   },
 ];
 
-type PickNotice = { message: string; tone: "neutral" | "good" | "near" | "bad" };
+/** Chrome drawn over the model: the viewer's own gestures must not claim it. */
+const VIEWER_UI = "[data-viewer-marker],[data-viewer-ui]";
+
+type PickNotice = {
+  message: string;
+  tone: "neutral" | "good" | "near" | "bad";
+  /** Turns the notice into an invitation rather than a verdict. */
+  action?: { label: string; run: () => void };
+};
 type HoverLabel = {
   id: string;
   name: string;
@@ -294,20 +302,28 @@ export function TrainingDemo() {
     });
   }, [session]);
 
-  // The console is an overlay at every width, closed by default. The first
-  // agent-origin tool call opens it once, so the audit trail arrives as a
-  // moment; after that the navbar badge carries the signal.
+  // The console is an overlay at every width and only ever opens because
+  // someone asked. It used to throw itself open on the first agent call, which
+  // is a heavy way to say "look over here" — a full-height drawer across the
+  // model, unrequested, while the learner is trying to walk.
+  //
+  // A first-time visitor still has to find out the audit trail exists, so the
+  // first agent call says so once, through the same transient surface a
+  // verdict uses, and offers to open it. Three seconds, then gone; the navbar
+  // badge carries the count from there.
   const agentCallCount = useMemo(
     () => calls.reduce((count, call) => count + (call.origin === "agent" ? 1 : 0), 0),
     [calls],
   );
-  const autoOpened = useRef(false);
-  useEffect(() => {
-    if (autoOpened.current || agentCallCount === 0) return;
-    autoOpened.current = true;
-    setActivityPaneOpen(true);
-    setMissionPaneOpen(false);
-  }, [agentCallCount]);
+  const [invited, setInvited] = useState(false);
+  if (agentCallCount > 0 && !invited) {
+    setInvited(true);
+    setNotice({
+      message: "ChatGPT is working in this page.",
+      tone: "neutral",
+      action: { label: "Watch it", run: () => openActivityPane() },
+    });
+  }
 
   // Everything visible while the pane is open counts as seen; the handlers
   // that open or close the pane stamp the count, so the closed-state badge
@@ -325,6 +341,12 @@ export function TrainingDemo() {
   const closeActivityPane = () => {
     setSeenCount(eventCount);
     setActivityPaneOpen(false);
+  };
+
+  const openActivityPane = () => {
+    setSeenCount(eventCount);
+    setActivityPaneOpen(true);
+    setMissionPaneOpen(false);
   };
 
   // Learner events flow *to* the agent too, where the host supports ambient
@@ -513,7 +535,7 @@ export function TrainingDemo() {
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-    if ((event.target as Element).closest("[data-viewer-marker]")) return;
+    if ((event.target as Element).closest(VIEWER_UI)) return;
     // Ask on the press, so the release knows whether this click bought the
     // camera or was made with it.
     heldAtPress.current = getStage()?.looking ?? false;
@@ -572,6 +594,14 @@ export function TrainingDemo() {
   }, []);
 
   const onPointerUp = (event: React.PointerEvent) => {
+    // Controls drawn over the model are chrome, not scene. Without this the
+    // section's capture handlers run first and a press on one of them takes
+    // the camera or answers the step, and can unmount the control before its
+    // own click ever fires.
+    if ((event.target as Element).closest(VIEWER_UI)) {
+      press.current = null;
+      return;
+    }
     const start = press.current;
     press.current = null;
     const held = getStage()?.looking ?? false;
@@ -900,8 +930,20 @@ export function TrainingDemo() {
 
           {notice ? (
             <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-[4.75rem] z-30 flex justify-center px-4">
-              <div className={`surface-pop max-w-lg rounded-md border px-3 py-2 text-center text-[12px] font-medium tone-${notice.tone}`}>
-                {notice.message}
+              <div className={`surface-pop flex max-w-lg items-center gap-2 rounded-md border px-3 py-2 text-center text-[12px] font-medium tone-${notice.tone}`}>
+                <span>{notice.message}</span>
+                {notice.action ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    data-viewer-ui=""
+                    onClick={notice.action.run}
+                    className="pointer-events-auto -mr-1 text-interactive hover:text-foreground"
+                  >
+                    {notice.action.label}
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : null}
