@@ -106,6 +106,7 @@ export function ViewerHud({
               highlighted={session.revealed.flatMap((hint) => hint.reveals ?? [])}
               cueElements={session.learningCuesOn ? learningCueElements(step) : []}
               cueRooms={session.learningCuesOn ? learningCueRooms(step) : []}
+              destination={step.validDestination?.room}
               annotations={session.annotations}
               trail={session.trail}
             />

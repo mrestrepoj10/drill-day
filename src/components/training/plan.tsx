@@ -25,6 +25,7 @@ export function FloorPlan({
   highlighted,
   cueElements,
   cueRooms,
+  destination,
   trail,
   annotations = [],
   onPickRoom,
@@ -35,11 +36,18 @@ export function FloorPlan({
   highlighted: string[];
   cueElements: string[];
   cueRooms: string[];
+  /** Room id a `reach` step is asking for, on this level or another. */
+  destination?: string;
   trail: { at: number; point: Vec3 }[];
   /** Notes the agent has pinned, in the order it pinned them. */
   annotations?: Annotation[];
   onPickRoom?: (roomId: string) => void;
 }) {
+  // Drawing only this storey means a destination upstairs is simply absent,
+  // which reads as "there is nowhere to go" rather than "not on this floor".
+  const target = destination ? ROOMS.find((r) => r.id === destination) : undefined;
+  const destinationElsewhere = target && target.level !== level ? target : undefined;
+
   const w = FOOTPRINT.x + PAD * 2;
   const h = FOOTPRINT.z + PAD * 2;
   const rooms = ROOMS.filter((r) => r.level === level);
@@ -85,6 +93,7 @@ export function FloorPlan({
       aria-label={
         `Plan of level ${level}` +
         (cueElements.length || cueRooms.length ? ", with learning cues" : "") +
+        (destinationElsewhere ? `, destination ${destinationElsewhere.name} on level ${destinationElsewhere.level}` : "") +
         (notesHere.length ? `, with ${notesHere.length} pinned note${notesHere.length > 1 ? "s" : ""}` : "")
       }
     >
@@ -102,6 +111,19 @@ export function FloorPlan({
               className={active ? "fill-foreground/15 stroke-foreground" : "fill-background stroke-border"}
               strokeWidth={0.28}
             />
+            {r.id === destination ? (
+              // Where you are being sent, marked like an answer rather than a
+              // cue: on a navigation step it is the whole objective.
+              <rect
+                x={x0}
+                y={z0}
+                width={x1 - x0}
+                height={z1 - z0}
+                className="pointer-events-none fill-success/10 stroke-success"
+                strokeWidth={0.5}
+                strokeDasharray="1.2 0.8"
+              />
+            ) : null}
             {cueRooms.includes(r.id) ? (
               <rect
                 x={x0}
@@ -198,6 +220,18 @@ export function FloorPlan({
           </text>
         </g>
       ))}
+
+      {destinationElsewhere ? (
+        <text
+          x={-PAD + 0.6}
+          y={-PAD + 1.9}
+          fontSize={1.5}
+          className="fill-success"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          {`${destinationElsewhere.name} is on level ${destinationElsewhere.level}`}
+        </text>
+      ) : null}
 
       {notesElsewhere.size > 0 ? (
         <text
