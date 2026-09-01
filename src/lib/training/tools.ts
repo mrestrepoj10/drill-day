@@ -308,7 +308,11 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       name: "training_start_mission",
       title: "Start a role's mission",
       description:
-        "Loads one of the built-in missions by role and drops the learner into its opening state.",
+        "Loads one of the built-in missions by role and drops the learner into its opening state. " +
+        "Only when the learner has asked for a drill, or the session has no mission and they have " +
+        "asked you to start one — a mission is scored, it takes the camera, and it replaces whatever " +
+        "they were doing. Briefing, touring, or answering questions about the building needs no " +
+        "mission: do that against the model as it stands.",
       inputSchema: schema(
         { role: { type: "string", enum: ROLES.map((r) => r.id) } },
         ["role"],

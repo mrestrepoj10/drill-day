@@ -28,7 +28,7 @@ Then make the call yourself: select the split drop, follow the inline directions
 
 If the recording needs a moment where nobody is typing, run **Let it work alone** from the start screen before the drill. One instruction, eight calls: it browses the chilled-water system, traces the server room back to the chiller, and pins three notes onto the plant in the 3D scene. Each note walks the camera into the room on foot and stops where a technician would stand to read the thing it names — lifting the ceiling tiles when the note is about a run in the void. Nothing it writes is an answer to any drill — it is the briefing you would get at a shift handover, and starting a mission clears it.
 
-The same happens with no drill loaded at all: paste the shift-handover prompt from the start screen and the agent walks the building in first person while it briefs you. The panel gets out of the way for the duration and the floor plan comes out on the model, so the shot is the building and where you are in it. When the agent goes quiet the camera flies back to the view it set off from, with every note it pinned visible on the model at once — that is the frame to end the section on.
+The same happens with no drill loaded at all: take the shift-handover prompt from the start card's **Brief me** tab and paste it and the agent walks the building in first person while it briefs you. The panel gets out of the way for the duration and the floor plan comes out on the model, so the shot is the building and where you are in it. When the agent goes quiet the camera flies back to the view it set off from, with every note it pinned visible on the model at once — that is the frame to end the section on.
 
 ## 2:05–2:40 — authored, and close
 

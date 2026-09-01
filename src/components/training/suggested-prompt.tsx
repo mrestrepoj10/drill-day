@@ -22,14 +22,45 @@ export const SUGGESTED_PROMPT =
 
 /**
  * The other half of the pitch: one instruction that keeps the agent busy on its
- * own for half a minute. WebMCP gives a page no way to speak first, so the way
- * to show an agent working rather than answering is to make a single prompt
- * worth many calls.
+ * own for a couple of minutes. WebMCP gives a page no way to speak first, so
+ * the way to show an agent working rather than answering is to make a single
+ * prompt worth many calls.
+ *
+ * "Shift handover" is doing real work in that sentence. It is a job people
+ * already know how to do, so the agent produces a briefing rather than a list,
+ * and everything after it exists because the briefing was worse without it:
+ * plain English over tag codes, and the floor named, because a note that reads
+ * "V-CHW-214" is a note nobody can act on.
  */
 export const AUDIT_PROMPT =
-  "Take me round the chilled-water system as if it is my first shift here. Stop at each thing that " +
-  "matters, bring the camera with you, and pin a note on it in plain English — what it does, and what " +
-  "goes off if I shut it. No bare tag codes, and tell me which floor I am on.";
+  "Walk the chilled-water system in this building and brief me the way you would at a shift handover. " +
+  "Pin a note on anything I should know before I touch a valve — what it does, and what goes off if I " +
+  "shut it. Plain English, no bare tag codes, and tell me which floor I am on.";
+
+/**
+ * The two ways to hand the page to an agent, as the launch card offers them.
+ *
+ * They are genuinely different sessions rather than two phrasings of one, which
+ * is why they get a switch instead of a list: one asks the agent to coach
+ * inside a scored drill and runs into the guardrails, the other asks it to work
+ * unsupervised with no drill at all. Showing both at once made the card the
+ * loudest thing on the screen; showing one at a time keeps the card the size it
+ * was and still says there is more than one shape of session here.
+ */
+export const AGENT_PROMPTS = [
+  {
+    id: "coach",
+    label: "Coach me",
+    prompt: SUGGESTED_PROMPT,
+    note: "Either order. Your agent reads the live session, and starts a drill only if you have not picked one.",
+  },
+  {
+    id: "brief",
+    label: "Brief me",
+    prompt: AUDIT_PROMPT,
+    note: "No drill needed. It walks the building on its own and pins what it finds; start one afterwards if you want scoring.",
+  },
+] as const;
 
 export function SuggestedPrompt({
   prompt = SUGGESTED_PROMPT,

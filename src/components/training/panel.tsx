@@ -28,7 +28,8 @@ import {
   type MissionStageView,
 } from "@/components/training/mission-progress";
 import { FloorPlan } from "@/components/training/plan";
-import { SuggestedPrompt } from "@/components/training/suggested-prompt";
+import { AGENT_PROMPTS, SuggestedPrompt } from "@/components/training/suggested-prompt";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -281,23 +282,40 @@ function MissionLaunch({
               </span>
             ) : null}
           </div>
-          <div className="mt-2.5">
-            <SuggestedPrompt
-              prominent
-              action={
-                <Button
-                  type="button"
-                  onClick={() => onPickRole("technician")}
-                  className="flex-1 text-[13px] font-semibold hover:bg-white"
-                >
-                  <Timer className="size-4" aria-hidden="true" /> Start the drill
-                </Button>
-              }
-            />
-          </div>
-          <p className="mt-3 text-pretty text-[12px] leading-[1.5] text-text-tertiary">
-            Either order. Your agent reads the live session, and starts a drill only if you have not picked one.
-          </p>
+          {/* A switch rather than a second block: both prompts are the whole
+              pitch, and stacking them made the card the loudest thing on a
+              1280px screen. The drill button is on both — it is still how you
+              start one, whichever prompt you took — and the note underneath
+              carries what changes between them. */}
+          <Tabs defaultValue={AGENT_PROMPTS[0].id} className="mt-2.5 gap-2.5">
+            <TabsList className="w-full">
+              {AGENT_PROMPTS.map((option) => (
+                <TabsTrigger key={option.id} value={option.id} className="text-[12px]">
+                  {option.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {AGENT_PROMPTS.map((option) => (
+              <TabsContent key={option.id} value={option.id}>
+                <SuggestedPrompt
+                  prompt={option.prompt}
+                  prominent
+                  action={
+                    <Button
+                      type="button"
+                      onClick={() => onPickRole("technician")}
+                      className="flex-1 text-[13px] font-semibold hover:bg-white"
+                    >
+                      <Timer className="size-4" aria-hidden="true" /> Start the drill
+                    </Button>
+                  }
+                />
+                <p className="mt-3 text-pretty text-[12px] leading-[1.5] text-text-tertiary">
+                  {option.note}
+                </p>
+              </TabsContent>
+            ))}
+          </Tabs>
         </div>
 
         {/* The cold start: what to paste, and what the page will refuse to do
