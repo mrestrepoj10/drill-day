@@ -296,7 +296,7 @@ function MissionLaunch({
             />
           </div>
           <p className="mt-3 text-pretty text-[12px] leading-[1.5] text-text-tertiary">
-            Either order. Your agent reads the live session, and starts the drill if you have not.
+            Either order. Your agent reads the live session, and starts a drill only if you have not picked one.
           </p>
         </div>
 
