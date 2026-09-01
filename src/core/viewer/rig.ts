@@ -215,6 +215,10 @@ export class CameraRig {
     // Re-seed the orbit around a point a few metres ahead of the eye.
     this.target.copy(this.camera.position).add(this.lookDirection().multiplyScalar(8))
     this.sphere.setFromVector3(this.camera.position.clone().sub(this.target))
+    // Leaving first person is a camera change even when nothing follows it to
+    // move the camera: whoever is drawing the walk controls has to hear that
+    // there is no longer anyone on foot.
+    this.emit()
   }
 
   // --- internals -----------------------------------------------------------

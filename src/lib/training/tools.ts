@@ -466,7 +466,13 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         // has to ask the same question training_locate_element would be asked.
         // Moving it anyway would make "you may not show them where it is" a
         // rule with a note-shaped hole in it.
-        const framed = Boolean(show) && permits(t, "training_locate_element")
+        // And walking is walking, whoever asked for it: arriving in the
+        // destination room is what clears a reach step, so a note framed there
+        // would finish the learner's navigation for them. training_set_view
+        // refuses outright during one; this pins the note and leaves the
+        // camera alone, which is the same rule with the note still delivered.
+        const navigating = walkingIsTheExercise(t)
+        const framed = Boolean(show) && permits(t, "training_locate_element") && !navigating
         if (framed) {
           const element = t.element(id)!
           // Lit in the agent's own blue before the camera moves, so the thing
@@ -489,9 +495,12 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
           framed,
           ...(show && !framed
             ? {
-                cameraHeld:
-                  "training_locate_element is switched off on this step, so the note is pinned but the " +
-                  "camera stayed where it was. Describe where it is instead — do not retry with show.",
+                cameraHeld: navigating
+                  ? "this step is a navigation objective and the learner has to walk it themselves, so the " +
+                    "note is pinned but the camera stayed where it was. Describe where it is instead — " +
+                    "do not retry with show."
+                  : "training_locate_element is switched off on this step, so the note is pinned but the " +
+                    "camera stayed where it was. Describe where it is instead — do not retry with show.",
               }
             : {}),
         }
@@ -576,6 +585,18 @@ function alongRun(
     [ex, element.level * STOREY, ez],
     [axisX ? far : x, y - EYE, axisX ? z : far],
   ]
+}
+
+/**
+ * Whether the learner is mid-way through a step they have to walk.
+ *
+ * Moving the camera on foot is graded: the runtime samples where the walker
+ * ended up and clears the step if that is where it asked them to be. So a
+ * camera move during a reach step is not a camera move, it is an answer.
+ */
+function walkingIsTheExercise(t: ViewerTraining): boolean {
+  const s = t.snapshot()
+  return s.status === "running" && s.step?.mode === "reach"
 }
 
 /** Whether the element sits in the ceiling void rather than in the room. */
