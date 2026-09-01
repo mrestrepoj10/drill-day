@@ -467,6 +467,19 @@ a {
   .workspace-viewer-objective {
     display: none;
   }
+
+  /* Except on a tour, where it owns nothing: there is no mission for it to
+     carry, the plan is out on the canvas instead, and a walkthrough someone
+     else is driving wants the model at full width the same way it does in the
+     drawer widths. Closing it there is a state change; here it is a layout
+     one, so the column has to go with it. */
+  .workspace-grid[data-touring] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-grid[data-touring] .workspace-mission {
+    display: none;
+  }
 }
 
 /* Occasional surfaces (toasts, verdicts, feed rows) arrive with a soft

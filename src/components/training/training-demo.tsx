@@ -920,7 +920,7 @@ export function TrainingDemo() {
         onToggleActivity={toggleActivityPane}
       />
 
-      <main id="training-workspace" className="workspace-grid">
+      <main id="training-workspace" className="workspace-grid" data-touring={tourFrom ? "" : undefined}>
         <TrainingPanel
           tools={tools}
           session={session}
