@@ -74,7 +74,7 @@ export function ViewerHud({
   // without the panel leaving a footprint behind.
   if (!open) {
     return (
-      <div className="workspace-hud" data-viewer-ui="" data-collapsed="" data-touring={touring || undefined} data-hidden={hidden || undefined}>
+      <div className="workspace-hud" data-viewer-ui="" data-collapsed="" data-touring={touring || undefined} data-notes={notes.length ? "" : undefined} data-hidden={hidden || undefined}>
         <Button
           type="button"
           variant="ghost"
@@ -99,6 +99,7 @@ export function ViewerHud({
       className="workspace-hud"
       data-viewer-ui=""
       data-touring={touring || undefined}
+      data-notes={notes.length ? "" : undefined}
       data-hidden={hidden || undefined}
     >
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background/55 backdrop-blur-xl">

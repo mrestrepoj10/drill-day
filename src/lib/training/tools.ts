@@ -151,15 +151,16 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       title: "Browse the model",
       description:
         "The catalogue this building actually contains, filtered by system, room, level or a name " +
-        "fragment. Use it to build a mission out of real elements. Steps that are testing wayfinding " +
-        "switch it off.",
+        "fragment. Use it to build a mission out of real elements. Filtering by system lights that " +
+        "system in the model. Steps that are testing wayfinding switch it off.",
       inputSchema: schema({
         system: { type: "string", maxLength: 60, description: "e.g. chilled water, fire, egress, air, electrical" },
         room: { type: "string", maxLength: 60 },
         level: { type: "number", minimum: 0, maximum: LEVELS - 1 },
         nameContains: { type: "string", maxLength: 80 },
       }),
-      annotations: { readOnlyHint: true },
+      // A system filter lights that system, so this is not read-only either.
+      annotations: { readOnlyHint: false },
       execute: (input: { system?: string; room?: string; level?: number; nameContains?: string }) => {
         const t = guard("training_list_elements")
         const q = (input.nameContains ?? "").toLowerCase()
@@ -201,9 +202,12 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       title: "Trace a system",
       description:
         "Walks a system from an element back to its source, and forward to everything it serves. This " +
-        "is what turns \"let's trace the riser together\" into something the model can answer.",
+        "is what turns \"let's trace the riser together\" into something the model can answer. Lights the " +
+        "chain in the model as it answers, so the learner sees the route you are reading.",
       inputSchema: schema({ id: { type: "string", maxLength: 80 } }, ["id"]),
-      annotations: { readOnlyHint: true },
+      // Not read-only any more: it lights what it traced. The hint is public
+      // metadata a host may gate approval on, so it says what the call does.
+      annotations: { readOnlyHint: false },
       execute: ({ id }: { id: string }) => {
         const t = guard("training_trace_system")
         if (!t.element(id)) throw new Error(`no element "${id}"`)

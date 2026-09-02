@@ -48,6 +48,24 @@ const OVERVIEW = Stage.frame([24, 3, 16], 82, -1.05, 0.66);
  * tour has shown, times a margin, floored so a brisk opening does not set an
  * impatient window and capped so a stall does not hold the camera forever.
  */
+/**
+ * The calls that put someone in the building.
+ *
+ * A tour is "an agent is showing me around", and these are the tools that can
+ * make that true: they move the camera, light part of the model, or read a
+ * piece of it out. Everything else an agent can call — reading the session,
+ * saying a line, composing a mission — leaves the view exactly as it was.
+ */
+const TOURING_TOOLS = new Set([
+  "training_annotate",
+  "training_cut_section",
+  "training_inspect_element",
+  "training_list_elements",
+  "training_locate_element",
+  "training_set_view",
+  "training_trace_system",
+]);
+
 const TOUR_QUIET_MIN_MS = 20_000;
 const TOUR_QUIET_MAX_MS = 90_000;
 const TOUR_QUIET_MARGIN = 3;
@@ -389,7 +407,16 @@ export function TrainingDemo() {
   const annotationsRef = useRef(0);
 
   const sessionStatus = session.status;
-  const lastCallName = calls.length ? calls[calls.length - 1].name : "";
+  // The last call that actually reached the building and came back clean.
+  const lastBuildingCallId = useMemo(() => {
+    for (let i = calls.length - 1; i >= 0; i--) {
+      const call = calls[i];
+      if (!TOURING_TOOLS.has(call.name)) continue;
+      if (call.durationMs === undefined || call.error) continue;
+      return call.id;
+    }
+    return 0;
+  }, [calls]);
 
   useEffect(() => {
     // A tour used to begin at the agent's first *step*, which is several calls
@@ -399,13 +426,15 @@ export function TrainingDemo() {
     // to look alive. It begins at the first call that touches the building
     // instead, so the panel steps aside and the plan comes up straight away.
     //
-    // Reading the session is not touching the building: an agent answering a
-    // question about the session should not rearrange the page to do it.
-    if (!lastCallId || sessionStatus === "running") return;
-    if (lastCallName === "training_get_session" || !lastCallName) return;
+    // Only the calls that read or move the building count. Answering a
+    // question about the session, saying a line, or composing a mission puts
+    // nobody in a corridor, and neither does a call that failed validation —
+    // none of them should clear the panel and then hold the camera for the
+    // length of a briefing that never happened.
+    if (!lastBuildingCallId || sessionStatus === "running") return;
     setTourFrom((from) => from ?? restingView.current ?? OVERVIEW);
     setMissionPaneOpen(false);
-  }, [lastCallId, lastCallName, sessionStatus]);
+  }, [lastBuildingCallId, sessionStatus]);
 
   useEffect(() => {
     const stage = getStage();
@@ -947,6 +976,9 @@ export function TrainingDemo() {
   const walkToNote = useCallback(
     (id: string) => {
       if (!training) return;
+      // Recorded before the camera moves: one audit trail, and a learner
+      // choosing which note to look at again is a choice like any other.
+      training.revisit(id);
       void frameElement(training, id);
     },
     [training],

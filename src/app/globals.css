@@ -366,8 +366,11 @@ a {
 
 /* On a tour it comes out at every width: the mission panel is not showing a
    plan, because there is no mission, and "where has it taken me" is the one
-   question a walkthrough someone else is driving always raises. */
-.workspace-hud[data-touring] {
+   question a walkthrough someone else is driving always raises. The same goes
+   for the notes a tour leaves behind — the panel goes back to the launch pitch
+   when the tour ends, and the only way to walk the briefing back is here. */
+.workspace-hud[data-touring],
+.workspace-hud[data-notes] {
   display: block;
 }
 
