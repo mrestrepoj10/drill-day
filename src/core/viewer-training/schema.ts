@@ -152,6 +152,16 @@ export interface SelectionResult {
   verdict?: Verdict
 }
 
+/**
+ * How many notes the model holds at once.
+ *
+ * A ceiling so a chatty agent cannot bury the building it is annotating. It is
+ * exported because the batch form of `training_annotate` has to advertise the
+ * same number — a schema that accepts more than the store keeps would report
+ * notes as pinned and then walk the camera to markers that are not there.
+ */
+export const ANNOTATION_LIMIT = 6
+
 export interface Decision {
   at: number
   stepId: string
