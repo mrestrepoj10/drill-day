@@ -188,14 +188,26 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
     },
     {
       name: "training_inspect_element",
-      title: "Inspect one element",
+      title: "Inspect elements",
       description:
-        "Full detail for a single element: its property set, the room and level it sits in, what feeds " +
-        "it and what it feeds. Allowed on every step — knowing what a thing is has never been the " +
-        "part worth withholding.",
-      inputSchema: schema({ id: { type: "string", maxLength: 80 } }, ["id"]),
+        "Full detail for one element or many: property set, the room and level it sits in, what feeds " +
+        "it and what it feeds. Pass `ids` for a whole set in one call — a briefing that inspects eight " +
+        "valves one at a time spends a minute doing it, and the learner watches a still picture for all " +
+        "of it. Allowed on every step: knowing what a thing is has never been the part worth " +
+        "withholding.",
+      inputSchema: schema({
+        id: { type: "string", maxLength: 80 },
+        ids: { type: "array", maxItems: 24, items: { type: "string", maxLength: 80 } },
+      }),
       annotations: { readOnlyHint: true },
-      execute: ({ id }: { id: string }) => describe(id),
+      execute: ({ id, ids }: { id?: string; ids?: string[] }) => {
+        const wanted = ids?.length ? ids : id ? [id] : []
+        if (!wanted.length) throw new Error("pass id, or ids for several at once")
+        // The single form keeps returning a single element, so nothing that
+        // reads `.name` off the result breaks the day a batch is asked for.
+        if (!ids?.length) return describe(wanted[0])
+        return { count: wanted.length, elements: wanted.map(describe) }
+      },
     },
     {
       name: "training_trace_system",
@@ -226,10 +238,18 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
             highlight: [{ ids: [id, ...upstream.map((e) => e.id), ...downstream.map((e) => e.id)], tone: "trace" }],
           })
         }
-        return {
-          upstream: upstream.map((e) => ({ id: e.id, name: e.name, room: e.room, level: e.level })),
-          downstream: downstream.map((e) => ({ id: e.id, name: e.name, room: e.room, level: e.level })),
-        }
+        // With the properties inline, tracing a system usually answers the
+        // whole question. It used to hand back names and leave the agent to
+        // inspect each one, which is a round trip per valve before it can say
+        // anything at all.
+        const row = (e: TrainingElement) => ({
+          id: e.id,
+          name: e.name,
+          room: e.room,
+          level: e.level,
+          properties: e.props ?? {},
+        })
+        return { upstream: upstream.map(row), downstream: downstream.map(row) }
       },
     },
     {
@@ -476,21 +496,64 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         "corridor ceiling above you\" and put the tag in brackets if it matters. Say what it means for " +
         "them — what stops, who notices, what to check first — not what the property sheet says. One " +
         "note per element; they clear when the step changes. Set show to bring the camera with you so " +
-        "they see each one in place. Pass clearAll to take them all down at once.",
+        "they see each one in place. Pass clearAll to take them all down at once.\n\n" +
+        "Pass `notes` to pin a whole briefing in one call. Every note appears at once and the camera " +
+        "then walks the set in order, so the learner watches one continuous walkthrough instead of " +
+        "waiting on you between each stop. Prefer it: six notes pinned one call at a time is six waits " +
+        "on a model, and the building sits still through all of them.",
       inputSchema: schema({
         id: { type: "string", maxLength: 80 },
         note: { type: "string", minLength: 1, maxLength: 220 },
+        notes: {
+          type: "array",
+          maxItems: 8,
+          description: "A whole briefing at once, walked in the order given",
+          items: schema(
+            { id: { type: "string", maxLength: 80 }, note: { type: "string", minLength: 1, maxLength: 220 } },
+            ["id", "note"],
+          ),
+        },
         show: {
           type: "boolean",
           description: "Frame the element as the note lands, so pinning reads as a walkthrough",
         },
         clearAll: { type: "boolean", description: "Remove every pinned note instead of adding one" },
       }),
-      execute: async (input: { id?: string; note?: string; show?: boolean; clearAll?: boolean }) => {
-        const { id, note, show, clearAll } = input
+      execute: async (input: {
+        id?: string
+        note?: string
+        notes?: { id: string; note: string }[]
+        show?: boolean
+        clearAll?: boolean
+      }) => {
+        const { id, note, notes, show, clearAll } = input
         const t = guard("training_annotate")
         if (clearAll) return { cleared: t.clearAnnotations() }
-        if (!id || !note) throw new Error("pass both id and note, or clearAll: true")
+
+        if (notes?.length) {
+          // Pinned first, all of them, so the plan fills in the moment the
+          // call lands and the learner can see the shape of the briefing
+          // before the camera has been anywhere.
+          for (const entry of notes) {
+            if (!entry?.id || !entry?.note) throw new Error("every note needs an id and a note")
+            t.annotate(entry.id, entry.note)
+          }
+          const walk = Boolean(show) && permits(t, "training_locate_element") && !walkingIsTheExercise(t)
+          // The walk is not awaited. Holding the call open for the length of
+          // the walkthrough would make the agent wait on its own animation and
+          // put a ten-second tool call in front of whatever host is running
+          // it; letting it play means the learner watches the building while
+          // the agent writes the brief, which is the same wall clock spent
+          // twice.
+          if (walk) void playBriefing(t, notes)
+          return {
+            pinned: notes.map((entry) => t.element(entry.id)?.name ?? entry.id),
+            walking: walk,
+            ...(walk ? { note: "The camera is walking the set now — say your piece while it does." } : {}),
+          }
+        }
+
+        if (!id || !note) throw new Error("pass id and note, or notes for several, or clearAll: true")
         const pinned = t.annotate(id, note)
         // Annotating is allowed on steps that withhold locating, so the camera
         // has to ask the same question training_locate_element would be asked.
@@ -566,6 +629,32 @@ export async function frameElement(t: ViewerTraining, id: string): Promise<boole
   // pushing a tile up to look is how you see the pipework in this building.
   if (aboveCeiling(element)) t.openCeiling(true)
   return true
+}
+
+/** How long the camera rests on each note of a walked briefing. */
+const DWELL_MS = 1100
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Which briefing walk is the current one.
+ *
+ * A second batch supersedes the first rather than interleaving with it: two
+ * loops driving one camera is a fight nobody wins, and the newer set is the
+ * one the agent meant.
+ */
+let briefingEpoch = 0
+
+/** Walks a pinned set in order, in the background, until something newer starts. */
+async function playBriefing(t: ViewerTraining, notes: { id: string }[]): Promise<void> {
+  const mine = ++briefingEpoch
+  for (const entry of notes) {
+    if (mine !== briefingEpoch) return
+    await frameElement(t, entry.id)
+    // Long enough to read the note it just stopped at, short enough that a
+    // six-stop briefing still reads as one continuous move.
+    await pause(DWELL_MS)
+  }
 }
 
 /** A horizontal extent past which an element may be a run rather than a thing. */
