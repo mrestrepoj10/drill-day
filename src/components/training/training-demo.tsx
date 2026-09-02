@@ -20,7 +20,7 @@ import {
 } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, EYE, LEVELS, ROOMS, STOREY } from "@/lib/training/facility";
 import { MISSIONS, ROLES } from "@/lib/training/missions";
-import { trainingTools } from "@/lib/training/tools";
+import { frameElement, trainingTools } from "@/lib/training/tools";
 import { TrainingScene } from "@/components/training/scene";
 import { missionStages, TrainingPanel } from "@/components/training/panel";
 import { ViewerHud } from "@/components/training/viewer-hud";
@@ -384,8 +384,29 @@ export function TrainingDemo() {
   // The pace of the agent driving this tour: when its last call landed, and
   // the longest it has gone between two of them.
   const pace = useRef({ at: 0, longest: 0 });
+  // Read inside the end-of-tour timeout, which fires long after the render
+  // that scheduled it.
+  const annotationsRef = useRef(0);
 
   const sessionStatus = session.status;
+  const lastCallName = calls.length ? calls[calls.length - 1].name : "";
+
+  useEffect(() => {
+    // A tour used to begin at the agent's first *step*, which is several calls
+    // in: it reads the session, browses the catalogue and traces the system
+    // before it has anything to pin. That left the page still for the best
+    // part of a minute while the agent worked — the one moment it most needs
+    // to look alive. It begins at the first call that touches the building
+    // instead, so the panel steps aside and the plan comes up straight away.
+    //
+    // Reading the session is not touching the building: an agent answering a
+    // question about the session should not rearrange the page to do it.
+    if (!lastCallId || sessionStatus === "running") return;
+    if (lastCallName === "training_get_session" || !lastCallName) return;
+    setTourFrom((from) => from ?? restingView.current ?? OVERVIEW);
+    setMissionPaneOpen(false);
+  }, [lastCallId, lastCallName, sessionStatus]);
+
   useEffect(() => {
     const stage = getStage();
     if (!stage) return;
@@ -406,6 +427,10 @@ export function TrainingDemo() {
       setMissionPaneOpen(false);
     });
   }, [getStage, status, sessionStatus]);
+
+  useEffect(() => {
+    annotationsRef.current = session.annotations.length;
+  }, [session.annotations]);
 
   useEffect(() => {
     if (!tourFrom) {
@@ -431,10 +456,12 @@ export function TrainingDemo() {
     const timer = setTimeout(() => {
       training?.exitWalk();
       void getStage()?.flyTo(tourFrom, 900);
-      // All the way back, panel included: the notes stay pinned on the model
-      // beside it, and what someone wants in front of them after a briefing is
-      // the thing that starts the drill.
-      setMissionPaneOpen(true);
+      // All the way back — but only as far as the panel when the briefing left
+      // nothing to walk. At drawer widths the panel covers the plan, and the
+      // plan is carrying the notes and the control that steps through them; a
+      // briefing you cannot walk back is one you had to take in at the agent's
+      // pace, once. The panel is a toggle away when they want it.
+      if (!annotationsRef.current) setMissionPaneOpen(true);
       setTourFrom(null);
     }, wait);
     return () => clearTimeout(timer);
@@ -917,6 +944,14 @@ export function TrainingDemo() {
     ? `${challengeName} of ${String(ROLES.length).padStart(2, "0")}`
     : challengeName;
 
+  const walkToNote = useCallback(
+    (id: string) => {
+      if (!training) return;
+      void frameElement(training, id);
+    },
+    [training],
+  );
+
   const toggleSection = () => {
     training?.openCeiling(!sectionOn);
   };
@@ -1014,6 +1049,7 @@ export function TrainingDemo() {
             stageLabel={hudStageLabel}
             hidden={missionPaneOpen}
             touring={!!tourFrom}
+            onWalkNote={walkToNote}
           />
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 
