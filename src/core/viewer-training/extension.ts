@@ -8,7 +8,7 @@ import {
   traceDownstream,
   traceUpstream,
 } from "./evaluate"
-import { learningCueElements } from "./schema"
+import { ANNOTATION_LIMIT, learningCueElements } from "./schema"
 import type {
   Annotation,
   Decision,
@@ -396,7 +396,7 @@ class ViewerTrainingRuntime implements ViewerTraining {
         ...this.session,
         // One note per element, newest last, and a ceiling so a chatty agent
         // cannot bury the building it is annotating.
-        annotations: [...this.session.annotations.filter((a) => a.id !== id), entry].slice(-6),
+        annotations: [...this.session.annotations.filter((a) => a.id !== id), entry].slice(-ANNOTATION_LIMIT),
       }
       this.record({ kind: "annotate", by: "agent", element: id, note })
       this.emit()

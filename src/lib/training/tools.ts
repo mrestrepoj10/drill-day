@@ -1,4 +1,5 @@
 import { schema, type ModelContextTool } from "@layer0/webmcp"
+import { ANNOTATION_LIMIT } from "@layer0/viewer-training"
 import type { Mission, TrainingElement, TrainingRoom, TrainingStep, Vec3, ViewerTraining } from "@layer0/viewer-training"
 import { CLEAR, ELEMENT_BY_ID, EYE, FOOTPRINT, LEVELS, ROOMS, roomCentre, STOREY } from "./facility"
 import { MISSIONS, ROLES } from "./missions"
@@ -55,11 +56,6 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
    * log has to belong to a call the agent actually made — otherwise the audit
    * trail grows blocks nobody attempted.
    */
-  const permits = (t: ViewerTraining, name: string): boolean => {
-    const allowed = t.snapshot().step?.allowedTools
-    return !allowed || allowed.includes(name)
-  }
-
   const describe = (id: string) => {
     const t = need()
     const element = t.element(id)
@@ -497,7 +493,8 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         "them — what stops, who notices, what to check first — not what the property sheet says. One " +
         "note per element; they clear when the step changes. Set show to bring the camera with you so " +
         "they see each one in place. Pass clearAll to take them all down at once.\n\n" +
-        "Pass `notes` to pin a whole briefing in one call. Every note appears at once and the camera " +
+        `Pass \`notes\` to pin a whole briefing in one call, up to ${ANNOTATION_LIMIT} of them — the ` +
+        "model holds that many and drops the oldest past it. Every note appears at once and the camera " +
         "then walks the set in order, so the learner watches one continuous walkthrough instead of " +
         "waiting on you between each stop. Prefer it: six notes pinned one call at a time is six waits " +
         "on a model, and the building sits still through all of them.",
@@ -506,7 +503,7 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         note: { type: "string", minLength: 1, maxLength: 220 },
         notes: {
           type: "array",
-          maxItems: 8,
+          maxItems: ANNOTATION_LIMIT,
           description: "A whole briefing at once, walked in the order given",
           items: schema(
             { id: { type: "string", maxLength: 80 }, note: { type: "string", minLength: 1, maxLength: 220 } },
@@ -531,13 +528,18 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         if (clearAll) return { cleared: t.clearAnnotations() }
 
         if (notes?.length) {
+          // Checked in full before any of it is applied. A batch that failed
+          // half way through would report as failed while having already
+          // pinned and recorded the entries before the bad one, and the
+          // corrected retry would then double them in the audit trail.
+          for (const entry of notes) {
+            if (!entry?.id || !entry?.note) throw new Error("every note needs an id and a note")
+            if (!t.element(entry.id)) throw new Error(`no element "${entry.id}" in this model — nothing was pinned`)
+          }
           // Pinned first, all of them, so the plan fills in the moment the
           // call lands and the learner can see the shape of the briefing
           // before the camera has been anywhere.
-          for (const entry of notes) {
-            if (!entry?.id || !entry?.note) throw new Error("every note needs an id and a note")
-            t.annotate(entry.id, entry.note)
-          }
+          for (const entry of notes) t.annotate(entry.id, entry.note)
           const walk = Boolean(show) && permits(t, "training_locate_element") && !walkingIsTheExercise(t)
           // The walk is not awaited. Holding the call open for the length of
           // the walkthrough would make the agent wait on its own animation and
@@ -631,6 +633,12 @@ export async function frameElement(t: ViewerTraining, id: string): Promise<boole
   return true
 }
 
+/** Whether the open step still allows a given tool. */
+function permits(t: ViewerTraining, name: string): boolean {
+  const allowed = t.snapshot().step?.allowedTools
+  return !allowed || allowed.includes(name)
+}
+
 /** How long the camera rests on each note of a walked briefing. */
 const DWELL_MS = 1100
 
@@ -645,11 +653,24 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
  */
 let briefingEpoch = 0
 
-/** Walks a pinned set in order, in the background, until something newer starts. */
+/**
+ * Walks a pinned set in order, in the background.
+ *
+ * Re-authorised at every stop, not just at the start. The camera is being
+ * driven for seconds after the call that asked for it returned, and in that
+ * time a drill can begin — at which point the mission owns the camera, and a
+ * walk still running would carry the learner into rooms a `reach` step was
+ * asking them to find for themselves. The guard that let this start has to
+ * keep being true for it to keep going.
+ */
 async function playBriefing(t: ViewerTraining, notes: { id: string }[]): Promise<void> {
   const mine = ++briefingEpoch
+  const under = t.snapshot().mission?.id ?? null
   for (const entry of notes) {
     if (mine !== briefingEpoch) return
+    const now = t.snapshot()
+    if ((now.mission?.id ?? null) !== under) return
+    if (walkingIsTheExercise(t) || !permits(t, "training_locate_element")) return
     await frameElement(t, entry.id)
     // Long enough to read the note it just stopped at, short enough that a
     // six-stop briefing still reads as one continuous move.
