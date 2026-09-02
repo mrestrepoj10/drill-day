@@ -564,6 +564,16 @@ function decisionEvent(decision: Decision, index: number): TimelineEvent {
       tone: "neutral",
     };
   }
+  if (decision.kind === "revisit") {
+    return {
+      id: `decision-${decision.at}-${index}`,
+      at: decision.at,
+      actor: "Learner",
+      title: `Walked back to ${element?.name ?? decision.element ?? "a note"}`,
+      detail: "Stepped through the agent's briefing again, at their own pace.",
+      tone: "neutral",
+    };
+  }
   if (decision.kind === "inspect") {
     return {
       id: `decision-${decision.at}-${index}`,

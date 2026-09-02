@@ -167,6 +167,7 @@ export interface Decision {
     | "enter"
     | "annotate"
     | "reselect"
+    | "revisit"
   /**
    * Who did it. The learner is the default because everything used to be them;
    * an agent answering or annotating is attributed so the feed, the metrics and

@@ -20,7 +20,7 @@ import {
 } from "@layer0/viewer-training";
 import { ELEMENT_BY_ID, EYE, LEVELS, ROOMS, STOREY } from "@/lib/training/facility";
 import { MISSIONS, ROLES } from "@/lib/training/missions";
-import { trainingTools } from "@/lib/training/tools";
+import { frameElement, trainingTools } from "@/lib/training/tools";
 import { TrainingScene } from "@/components/training/scene";
 import { missionStages, TrainingPanel } from "@/components/training/panel";
 import { ViewerHud } from "@/components/training/viewer-hud";
@@ -48,6 +48,24 @@ const OVERVIEW = Stage.frame([24, 3, 16], 82, -1.05, 0.66);
  * tour has shown, times a margin, floored so a brisk opening does not set an
  * impatient window and capped so a stall does not hold the camera forever.
  */
+/**
+ * The calls that put someone in the building.
+ *
+ * A tour is "an agent is showing me around", and these are the tools that can
+ * make that true: they move the camera, light part of the model, or read a
+ * piece of it out. Everything else an agent can call — reading the session,
+ * saying a line, composing a mission — leaves the view exactly as it was.
+ */
+const TOURING_TOOLS = new Set([
+  "training_annotate",
+  "training_cut_section",
+  "training_inspect_element",
+  "training_list_elements",
+  "training_locate_element",
+  "training_set_view",
+  "training_trace_system",
+]);
+
 const TOUR_QUIET_MIN_MS = 20_000;
 const TOUR_QUIET_MAX_MS = 90_000;
 const TOUR_QUIET_MARGIN = 3;
@@ -384,8 +402,40 @@ export function TrainingDemo() {
   // The pace of the agent driving this tour: when its last call landed, and
   // the longest it has gone between two of them.
   const pace = useRef({ at: 0, longest: 0 });
+  // Read inside the end-of-tour timeout, which fires long after the render
+  // that scheduled it.
+  const annotationsRef = useRef(0);
 
   const sessionStatus = session.status;
+  // The last call that actually reached the building and came back clean.
+  const lastBuildingCallId = useMemo(() => {
+    for (let i = calls.length - 1; i >= 0; i--) {
+      const call = calls[i];
+      if (!TOURING_TOOLS.has(call.name)) continue;
+      if (call.durationMs === undefined || call.error) continue;
+      return call.id;
+    }
+    return 0;
+  }, [calls]);
+
+  useEffect(() => {
+    // A tour used to begin at the agent's first *step*, which is several calls
+    // in: it reads the session, browses the catalogue and traces the system
+    // before it has anything to pin. That left the page still for the best
+    // part of a minute while the agent worked — the one moment it most needs
+    // to look alive. It begins at the first call that touches the building
+    // instead, so the panel steps aside and the plan comes up straight away.
+    //
+    // Only the calls that read or move the building count. Answering a
+    // question about the session, saying a line, or composing a mission puts
+    // nobody in a corridor, and neither does a call that failed validation —
+    // none of them should clear the panel and then hold the camera for the
+    // length of a briefing that never happened.
+    if (!lastBuildingCallId || sessionStatus === "running") return;
+    setTourFrom((from) => from ?? restingView.current ?? OVERVIEW);
+    setMissionPaneOpen(false);
+  }, [lastBuildingCallId, sessionStatus]);
+
   useEffect(() => {
     const stage = getStage();
     if (!stage) return;
@@ -406,6 +456,10 @@ export function TrainingDemo() {
       setMissionPaneOpen(false);
     });
   }, [getStage, status, sessionStatus]);
+
+  useEffect(() => {
+    annotationsRef.current = session.annotations.length;
+  }, [session.annotations]);
 
   useEffect(() => {
     if (!tourFrom) {
@@ -431,10 +485,12 @@ export function TrainingDemo() {
     const timer = setTimeout(() => {
       training?.exitWalk();
       void getStage()?.flyTo(tourFrom, 900);
-      // All the way back, panel included: the notes stay pinned on the model
-      // beside it, and what someone wants in front of them after a briefing is
-      // the thing that starts the drill.
-      setMissionPaneOpen(true);
+      // All the way back — but only as far as the panel when the briefing left
+      // nothing to walk. At drawer widths the panel covers the plan, and the
+      // plan is carrying the notes and the control that steps through them; a
+      // briefing you cannot walk back is one you had to take in at the agent's
+      // pace, once. The panel is a toggle away when they want it.
+      if (!annotationsRef.current) setMissionPaneOpen(true);
       setTourFrom(null);
     }, wait);
     return () => clearTimeout(timer);
@@ -917,6 +973,17 @@ export function TrainingDemo() {
     ? `${challengeName} of ${String(ROLES.length).padStart(2, "0")}`
     : challengeName;
 
+  const walkToNote = useCallback(
+    (id: string) => {
+      if (!training) return;
+      // Recorded before the camera moves: one audit trail, and a learner
+      // choosing which note to look at again is a choice like any other.
+      training.revisit(id);
+      void frameElement(training, id);
+    },
+    [training],
+  );
+
   const toggleSection = () => {
     training?.openCeiling(!sectionOn);
   };
@@ -1014,6 +1081,7 @@ export function TrainingDemo() {
             stageLabel={hudStageLabel}
             hidden={missionPaneOpen}
             touring={!!tourFrom}
+            onWalkNote={walkToNote}
           />
           <ViewerMarkers getStage={getStage} markers={[...roomSigns, ...markers]} />
 

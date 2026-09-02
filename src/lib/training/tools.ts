@@ -151,15 +151,16 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       title: "Browse the model",
       description:
         "The catalogue this building actually contains, filtered by system, room, level or a name " +
-        "fragment. Use it to build a mission out of real elements. Steps that are testing wayfinding " +
-        "switch it off.",
+        "fragment. Use it to build a mission out of real elements. Filtering by system lights that " +
+        "system in the model. Steps that are testing wayfinding switch it off.",
       inputSchema: schema({
         system: { type: "string", maxLength: 60, description: "e.g. chilled water, fire, egress, air, electrical" },
         room: { type: "string", maxLength: 60 },
         level: { type: "number", minimum: 0, maximum: LEVELS - 1 },
         nameContains: { type: "string", maxLength: 80 },
       }),
-      annotations: { readOnlyHint: true },
+      // A system filter lights that system, so this is not read-only either.
+      annotations: { readOnlyHint: false },
       execute: (input: { system?: string; room?: string; level?: number; nameContains?: string }) => {
         const t = guard("training_list_elements")
         const q = (input.nameContains ?? "").toLowerCase()
@@ -170,6 +171,13 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
           .filter((e) => input.level === undefined || e.level === input.level)
           .filter((e) => !q || e.name.toLowerCase().includes(q) || e.id.toLowerCase().includes(q))
           .map((e) => ({ id: e.id, name: e.name, system: e.system, room: e.room, level: e.level }))
+        // Same reasoning as tracing: asking for "everything on chilled water"
+        // is the agent looking at a system, and the building can show which
+        // one. Only for a system query — a room or name search is a lookup,
+        // not a survey — and only where locating is allowed.
+        if (input.system && rows.length && permits(t, "training_locate_element")) {
+          void t.applyViewerState({ highlight: [{ ids: rows.map((e) => e.id), tone: "trace" }] })
+        }
         return {
           count: rows.length,
           systems: [...new Set(t.elements().map((e) => e.system))],
@@ -194,15 +202,33 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
       title: "Trace a system",
       description:
         "Walks a system from an element back to its source, and forward to everything it serves. This " +
-        "is what turns \"let's trace the riser together\" into something the model can answer.",
+        "is what turns \"let's trace the riser together\" into something the model can answer. Lights the " +
+        "chain in the model as it answers, so the learner sees the route you are reading.",
       inputSchema: schema({ id: { type: "string", maxLength: 80 } }, ["id"]),
-      annotations: { readOnlyHint: true },
+      // Not read-only any more: it lights what it traced. The hint is public
+      // metadata a host may gate approval on, so it says what the call does.
+      annotations: { readOnlyHint: false },
       execute: ({ id }: { id: string }) => {
         const t = guard("training_trace_system")
         if (!t.element(id)) throw new Error(`no element "${id}"`)
+        const upstream = t.upstream(id)
+        const downstream = t.downstream(id)
+        // Show the chain it just walked. Tracing is the call an agent makes
+        // before it has anything to say, and until now it changed nothing on
+        // screen — so the first minute of a briefing was a still picture while
+        // the agent read. The route lighting up is both faster to see and
+        // truer: this is exactly what the tool looked at.
+        //
+        // Behind the locating guard, because a lit chain is a map of the
+        // answer on a step that is withholding one.
+        if (permits(t, "training_locate_element")) {
+          void t.applyViewerState({
+            highlight: [{ ids: [id, ...upstream.map((e) => e.id), ...downstream.map((e) => e.id)], tone: "trace" }],
+          })
+        }
         return {
-          upstream: t.upstream(id).map((e) => ({ id: e.id, name: e.name, room: e.room, level: e.level })),
-          downstream: t.downstream(id).map((e) => ({ id: e.id, name: e.name, room: e.room, level: e.level })),
+          upstream: upstream.map((e) => ({ id: e.id, name: e.name, room: e.room, level: e.level })),
+          downstream: downstream.map((e) => ({ id: e.id, name: e.name, room: e.room, level: e.level })),
         }
       },
     },
@@ -477,22 +503,7 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
         // camera alone, which is the same rule with the note still delivered.
         const navigating = walkingIsTheExercise(t)
         const framed = Boolean(show) && permits(t, "training_locate_element") && !navigating
-        if (framed) {
-          const element = t.element(id)!
-          // Lit in the agent's own blue before the camera moves, so the thing
-          // the note is about is picked out of the services around it — a
-          // 22 m pipe read from one end is otherwise one grey line among many.
-          // Only when the camera is allowed to move: a highlight on a step
-          // that withholds locating would give away exactly what the guard is
-          // keeping back.
-          await t.applyViewerState({ highlight: [{ ids: [id], tone: "trace" }] })
-          await t.enterWalk(...standIn(element))
-          // Walking closes the ceiling, and a run in the void is then behind
-          // it: the note would land on a tile grid. Lift the tiles for those,
-          // the way someone pushing a tile up to look is how you see the
-          // pipework in this building at all.
-          if (aboveCeiling(element)) t.openCeiling(true)
-        }
+        if (framed) await frameElement(t, id)
         return {
           pinnedTo: t.element(id)?.name ?? id,
           note: pinned.note,
@@ -535,6 +546,28 @@ export function trainingTools({ getTraining, replay, setRole }: TrainingToolHook
  * it was about. This backs off into the element's own room instead and looks at
  * it from where a person could actually stand.
  */
+/**
+ * Walks the camera to an element and lights it, the way a pinned note does.
+ *
+ * Exported because the learner gets to walk the notes back afterwards, and a
+ * second implementation of "where do you stand to look at this" would drift
+ * from the first the day either changed.
+ */
+export async function frameElement(t: ViewerTraining, id: string): Promise<boolean> {
+  const element = t.element(id)
+  if (!element) return false
+  // Lit in the agent's own blue before the camera moves, so the thing the note
+  // is about is picked out of the services around it — a 22 m pipe read from
+  // one end is otherwise one grey line among many.
+  await t.applyViewerState({ highlight: [{ ids: [id], tone: "trace" }] })
+  await t.enterWalk(...standIn(element))
+  // Walking closes the ceiling, and a run in the void is then behind it: the
+  // note would land on a tile grid. Lift the tiles for those, the way someone
+  // pushing a tile up to look is how you see the pipework in this building.
+  if (aboveCeiling(element)) t.openCeiling(true)
+  return true
+}
+
 /** A horizontal extent past which an element may be a run rather than a thing. */
 const RUN_LENGTH = 3
 /** And how many times its own girth it has to be before it definitely is one. */

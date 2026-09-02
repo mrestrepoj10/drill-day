@@ -75,6 +75,8 @@ export interface ViewerTraining {
   attempt(id: ElementRef): SelectionResult
   /** Pins a note from the agent onto an element in the shared scene. */
   annotate(id: ElementRef, note: string): Annotation
+  /** The learner walked back to a note the agent pinned. */
+  revisit(id: ElementRef): void
   /** Removes every pinned note. Returns how many there were. */
   clearAnnotations(): number
   nextHint(): Hint | undefined
@@ -399,6 +401,15 @@ class ViewerTrainingRuntime implements ViewerTraining {
       this.record({ kind: "annotate", by: "agent", element: id, note })
       this.emit()
       return entry
+    }
+
+    revisit(id: ElementRef): void {
+      // Walking back to a note is a choice the learner made about what to look
+      // at again, so it belongs in the same trail as the clicks and the
+      // arrivals. Without it the camera moves, the highlight changes and the
+      // feed says nothing happened.
+      this.record({ kind: "revisit", by: "learner", element: id })
+      this.emit()
     }
 
     clearAnnotations(): number {
